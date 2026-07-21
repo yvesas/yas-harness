@@ -30,8 +30,17 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.js'],
-    ...tseslint.configs.disableTypeChecked,
+    // Config files and the scripts/ tooling are plain ESM, outside the
+    // TypeScript project: lint them without type information.
+    files: ['**/*.js', '**/*.mjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly' },
+      parserOptions: { projectService: false, project: false },
+    },
+    rules: {
+      'no-console': 'off',
+    },
   },
   prettier,
 );

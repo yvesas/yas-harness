@@ -10,10 +10,12 @@
     "node": ">=22"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "tsc --build tsconfig.build.json",
     "clean": "tsc --build tsconfig.build.json --clean",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "start": "node dist/index.js",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -22,11 +24,14 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "license:check": "node scripts/check-license-headers.mjs",
+    "license:fix": "node scripts/check-license-headers.mjs --fix",
+    "check": "npm run lint && npm run license:check && npm run typecheck && npm run test"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
     "@types/node": "^22.13.0",
+    "@types/pg": "^8.20.0",
     "eslint": "^9.19.0",
     "eslint-config-prettier": "^10.0.1",
     "prettier": "^3.4.2",
@@ -34,5 +39,8 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
     "vitest": "^3.0.4"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
   }
 }

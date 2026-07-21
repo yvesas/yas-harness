@@ -1,0 +1,26 @@
+name: yas-harness
+
+services:
+  postgres:
+    # pgvector ships on top of the official Postgres image; one database serves
+    # sessions, pools, credentials and embeddings.
+    image: pgvector/pgvector:pg17
+    container_name: yas-harness-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-harness}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-harness}
+      POSTGRES_DB: ${POSTGRES_DB:-harness}
+    ports:
+      - '${POSTGRES_PORT:-4000}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-harness} -d ${POSTGRES_DB:-harness}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres-data:

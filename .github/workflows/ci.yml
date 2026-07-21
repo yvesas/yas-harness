@@ -36,6 +36,9 @@ jobs:
       - name: License headers
         run: npm run license:check
 
+      - name: Architecture boundaries
+        run: npm run boundaries
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -45,8 +48,8 @@ jobs:
       - name: Build
         run: npm run build
 
-  migrations:
-    name: Migrations apply and roll back
+  database:
+    name: Migrations and integration tests
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -83,6 +86,11 @@ jobs:
 
       - name: Re-apply
         run: node scripts/migrate.mjs up
+
+      # Tenant isolation is a schema guarantee, so it is proven against the
+      # schema. These tests skip when DATABASE_URL is unset.
+      - name: Integration tests
+        run: npm test
 
   commits:
     name: Commit messages

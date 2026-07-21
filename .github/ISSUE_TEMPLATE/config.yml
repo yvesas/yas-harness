@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/yvesas/yas-harness/security/advisories/new
+    about: Never report a vulnerability in a public issue. Use a private advisory.

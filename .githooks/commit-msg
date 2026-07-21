@@ -1,0 +1,51 @@
+#!/bin/sh
+# Copyright 2026 YAS Softwares LTDA
+# SPDX-License-Identifier: Apache-2.0
+#
+# Rejects AI attribution and enforces Conventional Commits.
+# Enabled by `npm run prepare` (sets core.hooksPath to .githooks).
+
+msg_file="$1"
+# Ignore comment lines: they are stripped from the final message anyway.
+msg=$(grep -v '^#' "$msg_file")
+
+fail() {
+  echo "commit-msg: $1" >&2
+  echo >&2
+  echo "See CONTRIBUTING.md. Do not bypass this hook with --no-verify." >&2
+  exit 1
+}
+
+# --- 1. No AI attribution, no tool signatures -------------------------------
+if printf '%s' "$msg" | grep -qiE '^[[:space:]]*co-authored-by:'; then
+  fail "commit messages must not contain a Co-Authored-By trailer."
+fi
+
+if printf '%s' "$msg" | grep -qiE 'generated (with|by)[[:space:]]+.*(claude|copilot|cursor|chatgpt|gpt|gemini|codex|ai\b)'; then
+  fail "commit messages must not mention AI generation."
+fi
+
+if printf '%s' "$msg" | grep -qiE '(🤖|noreply@anthropic\.com|users\.noreply\.github\.com>[[:space:]]*$.*copilot)'; then
+  fail "commit messages must not carry tool signatures or bot addresses."
+fi
+
+# --- 2. Conventional Commits ------------------------------------------------
+subject=$(printf '%s' "$msg" | sed '/^[[:space:]]*$/d' | head -n 1)
+
+# Allow git's own generated messages (merge, revert, fixup).
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup!"* | "squash!"*) exit 0 ;;
+esac
+
+if ! printf '%s' "$subject" |
+  grep -qE '^(feat|fix|docs|chore|refactor|test|perf|build|ci|style)(\([a-z0-9./-]+\))?!?: .+'; then
+  fail "subject must follow Conventional Commits, e.g. 'feat(models): add Groq adapter'.
+Allowed types: feat, fix, docs, chore, refactor, test, perf, build, ci, style.
+Got: $subject"
+fi
+
+if [ "${#subject}" -gt 72 ]; then
+  fail "subject is ${#subject} characters; keep it under 72."
+fi
+
+exit 0

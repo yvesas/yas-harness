@@ -1,0 +1,13 @@
+# Default owner for everything in the repository.
+*                   @yvesas
+
+# Security-sensitive areas: never merge without an explicit review.
+/src/connections/   @yvesas
+/src/models/        @yvesas
+/src/approval/      @yvesas
+/src/pools/         @yvesas
+/migrations/        @yvesas
+/.github/           @yvesas
+/.githooks/         @yvesas
+/LICENSE            @yvesas
+/NOTICE             @yvesas

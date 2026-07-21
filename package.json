@@ -17,16 +17,17 @@
     "start": "node dist/index.js",
     "migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "node --env-file-if-exists=.env node_modules/.bin/vitest run",
+    "test:watch": "node --env-file-if-exists=.env node_modules/.bin/vitest",
+    "test:coverage": "node --env-file-if-exists=.env node_modules/.bin/vitest run --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "license:check": "node scripts/check-license-headers.mjs",
     "license:fix": "node scripts/check-license-headers.mjs --fix",
-    "check": "npm run lint && npm run license:check && npm run typecheck && npm run test"
+    "check": "npm run lint && npm run license:check && npm run boundaries && npm run typecheck && npm run test",
+    "boundaries": "node scripts/check-boundaries.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
@@ -41,6 +42,8 @@
     "vitest": "^3.0.4"
   },
   "dependencies": {
-    "pg": "^8.22.0"
+    "@anthropic-ai/sdk": "^0.112.4",
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
   }
 }

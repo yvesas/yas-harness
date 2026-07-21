@@ -104,6 +104,8 @@ export class Agent {
       const response: ModelResponse = await this.#gateway.complete({
         task: this.#persona.task,
         system: this.#persona.instructions,
+        // Carried so the gateway can attribute cost to this conversation.
+        attribution: { tenantId, sessionId },
         // A snapshot, not the working array: the loop keeps appending to
         // `history`, and an adapter must see the conversation as it was at
         // call time.

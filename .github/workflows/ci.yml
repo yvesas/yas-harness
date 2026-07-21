@@ -108,6 +108,15 @@ jobs:
           head="${{ github.event.pull_request.head.sha }}"
           status=0
           for sha in $(git rev-list "$base".."$head"); do
+            # Bot commits are generated, not authored: Dependabot's subject
+            # names every package it bumped and routinely exceeds our length
+            # rule, which it has no way to satisfy. What lands on main is the
+            # squash title, and a maintainer writes that.
+            author=$(git log -1 --format=%an "$sha")
+            case "$author" in
+              'dependabot[bot]' | 'github-actions[bot]') continue ;;
+            esac
+
             git log -1 --format=%B "$sha" > /tmp/commit-msg
             if ! .githooks/commit-msg /tmp/commit-msg; then
               echo "::error::invalid commit message in $sha"

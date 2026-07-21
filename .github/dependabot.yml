@@ -8,6 +8,14 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # typescript-eslint 8.x declares `typescript >=4.8.4 <6.1.0`, so a bump
+      # to TypeScript 7 cannot install at all — npm fails on the peer
+      # conflict and every grouped update is blocked with it. Minor and patch
+      # releases, and a future 6.x, still come through.
+      # Revisit once typescript-eslint ships support for TypeScript 7.
+      - dependency-name: typescript
+        versions: ['>=7']
     commit-message:
       prefix: chore
       include: scope

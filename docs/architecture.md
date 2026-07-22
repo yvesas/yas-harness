@@ -31,6 +31,8 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `SessionStore` | `src/memory/session-store.ts` | `PostgresSessionStore`, `InMemorySessionStore` |
 | `PoolStore` | `src/pools/pool-store.ts` | `PostgresPoolStore`, `InMemoryPoolStore` |
 | `ApprovalStore` | `src/approval/approval-store.ts` | `PostgresApprovalStore`, `InMemoryApprovalStore` |
+| `ConnectionStore` | `src/connections/connection-store.ts` | `PostgresConnectionStore`, `InMemoryConnectionStore` |
+| `CredentialStore` / `TenantKeyStore` | `src/connections/credential-vault.ts` | Postgres and in-memory |
 | `UsageRecorder` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden
@@ -109,9 +111,11 @@ in-memory double could agree with a wrong constraint.
 
 ## Security posture
 
-- Credentials are resolved at call time; the agent sees method names and
-  results, never keys. Envelope encryption for stored credentials arrives with
-  the connection layer (phase 5).
+- Credentials are stored sealed by envelope encryption — a master key wraps a
+  per-tenant data key, which encrypts that tenant's secrets. Only the vault's
+  `resolve` decrypts, and only the connection layer calls it, at the moment of
+  an outbound call; the agent sees method names and results, never keys. See
+  [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md).
 - We call model providers directly. A routing service would be a third party in
   the data path — every prompt and answer flowing through infrastructure we do
   not control — which is what the LGPD posture rules out. See

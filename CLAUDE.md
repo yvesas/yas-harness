@@ -23,6 +23,11 @@ Hexagonal (ports & adapters). Core depends on interfaces, never
 implementations. SOLID. Clean code. Multi-tenant from day one —
 every user-data table carries `tenant_id`, enforced by a constraint.
 
+See `docs/architecture.md` for the full picture, `docs/adr/` for the
+load-bearing decisions, and `docs/decisions.md` for the smaller ones. When you
+make a design choice worth recording, add a row to `docs/decisions.md`, or an
+ADR if it is load-bearing.
+
 Layout, one responsibility per folder (each has a README stating its boundary):
 
 | Folder | Responsibility |

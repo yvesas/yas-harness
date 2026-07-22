@@ -23,6 +23,10 @@ import type { ModelGateway } from './models/model-gateway.js';
 import type { ModelProvider } from './models/model-provider.js';
 import { RoutedGateway } from './models/routed-gateway.js';
 import { loadModelConfig } from './models/routing.js';
+import { ModuleRegistry } from './modules/module.js';
+import { PostgresPoolStore } from './pools/postgres-pool-store.js';
+import type { PoolStore } from './pools/pool-store.js';
+import { Router } from './router/router.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 
 export const HARNESS_NAME = 'yas-harness';
@@ -32,6 +36,9 @@ export interface Harness {
   readonly sessions: SessionStore;
   readonly gateway: ModelGateway;
   readonly tools: ToolRegistry;
+  readonly modules: ModuleRegistry;
+  readonly router: Router;
+  readonly pools: PoolStore;
   close(): Promise<void>;
 }
 
@@ -42,6 +49,8 @@ export interface HarnessOptions {
   readonly configDir?: string;
   /** Products register their module tools here before the first turn. */
   readonly tools?: ToolRegistry;
+  /** Products register their business modules here; the router uses them. */
+  readonly modules?: ModuleRegistry;
 }
 
 /**
@@ -76,12 +85,17 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     recorder: new PostgresUsageRecorder(pool),
   });
   const tools = options.tools ?? new ToolRegistry();
+  const modules = options.modules ?? new ModuleRegistry();
+  const pools = new PostgresPoolStore(pool);
 
   return {
     agent: new Agent({ gateway, sessions, tools, persona }),
     sessions,
     gateway,
     tools,
+    modules,
+    router: new Router(gateway, modules),
+    pools,
     close: () => pool.end(),
   };
 }
@@ -114,3 +128,13 @@ export type { ModelConfig, ModelEntry, ModelTier } from './models/routing.js';
 export { InMemoryUsageRecorder, computeCostUsd } from './telemetry/model-usage.js';
 export type { ModelUsageRecord, UsageRecorder } from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
+export { ModuleError, ModuleRegistry } from './modules/module.js';
+export type { ModuleDefinition } from './modules/module.js';
+export { Router, RouterError } from './router/router.js';
+export type { RouteDecision, RouteInput } from './router/router.js';
+export { evaluateRouter, failures, routerCaseSchema, routerCaseSetSchema } from './router/eval.js';
+export type { CaseOutcome, EvalReport, RouterCase } from './router/eval.js';
+export { InMemoryPoolStore } from './pools/in-memory-pool-store.js';
+export { PostgresPoolStore } from './pools/postgres-pool-store.js';
+export { PoolError, assertValidKey } from './pools/pool-store.js';
+export type { PoolEntry, PoolScope, PoolStore } from './pools/pool-store.js';

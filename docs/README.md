@@ -27,6 +27,7 @@ Two kinds, kept apart on purpose:
 | [0003](./adr/0003-central-router.md) | A central router on the cheap tier, evaluated before trusted |
 | [0004](./adr/0004-human-approval.md) | Human approval as a pause, not a block |
 | [0005](./adr/0005-connection-layer-and-credential-vault.md) | Our own connection layer, credentials sealed by envelope encryption |
+| [0006](./adr/0006-connector-contract.md) | One resource-shaped contract for every connector |
 
 ## Writing a new ADR
 

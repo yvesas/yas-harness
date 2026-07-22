@@ -14,7 +14,9 @@ import pg from 'pg';
 
 import { PostgresApprovalStore } from './approval/postgres-approval-store.js';
 import type { ApprovalStore } from './approval/approval-store.js';
+import { ConnectionManager } from './connections/connection-manager.js';
 import type { ConnectionStore } from './connections/connection-store.js';
+import { ConnectorRegistry } from './connections/connector-registry.js';
 import { CredentialVault } from './connections/credential-vault.js';
 import { EnvelopeCipher } from './connections/envelope-cipher.js';
 import {
@@ -51,12 +53,18 @@ export interface Harness {
   readonly pools: PoolStore;
   readonly approvals: ApprovalStore;
   readonly connections: ConnectionStore;
+  readonly connectors: ConnectorRegistry;
   /**
    * The credential vault. Present only when MASTER_ENCRYPTION_KEY is set — a
    * deployment that connects nothing does not need it, and starting one with a
    * missing key would be worse than starting without the vault.
    */
   readonly vault: CredentialVault | null;
+  /**
+   * Runs connector operations against a connection, resolving the credential
+   * at call time. Present only when the vault is — it needs one to resolve.
+   */
+  readonly connectionManager: ConnectionManager | null;
   close(): Promise<void>;
 }
 
@@ -71,6 +79,8 @@ export interface HarnessOptions {
   readonly modules?: ModuleRegistry;
   /** Base64 master key for the credential vault; defaults to the env var. */
   readonly masterEncryptionKey?: string;
+  /** Products register their connectors here; the connection manager uses them. */
+  readonly connectors?: ConnectorRegistry;
 }
 
 /**
@@ -121,6 +131,11 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
       )
     : null;
 
+  const connectors = options.connectors ?? new ConnectorRegistry();
+  // The manager needs the vault to resolve credentials; without a vault there
+  // is nothing to run a connector with.
+  const connectionManager = vault ? new ConnectionManager(connectors, connections, vault) : null;
+
   return {
     agent: new Agent({ gateway, sessions, tools, persona, approvals }),
     sessions,
@@ -131,7 +146,9 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     pools,
     approvals,
     connections,
+    connectors,
     vault,
+    connectionManager,
     close: () => pool.end(),
   };
 }
@@ -154,6 +171,26 @@ export type {
   ConnectionStore,
   CreateConnectionInput,
 } from './connections/connection-store.js';
+export {
+  ConnectorError,
+  ResourceNotFoundError,
+  assertConnectorConsistent,
+} from './connections/connector.js';
+export type {
+  Connector,
+  ConnectorCapability,
+  ConnectorContext,
+  ListOptions,
+  Resource,
+  ResourceDraft,
+  ResourcePage,
+  ResourcePatch,
+  SearchOptions,
+} from './connections/connector.js';
+export { ConnectorRegistry } from './connections/connector-registry.js';
+export { ConnectionManager, ConnectionManagerError } from './connections/connection-manager.js';
+export { MemoryConnector } from './connections/memory-connector.js';
+export type { MemoryConnectorOptions } from './connections/memory-connector.js';
 export { CipherError, EnvelopeCipher } from './connections/envelope-cipher.js';
 export type { Sealed } from './connections/envelope-cipher.js';
 export { CredentialVault, VaultError } from './connections/credential-vault.js';

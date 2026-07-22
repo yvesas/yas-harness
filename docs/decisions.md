@@ -56,6 +56,29 @@ ADR instead.
   blocks back unchanged, which the gateway port cannot express yet; the adapter
   drops those blocks rather than half-supporting the feature.
 
+## Connections and credentials
+
+- **Credentials use envelope encryption with a per-tenant data key.** A master
+  key wraps each tenant's data key; the data key encrypts that tenant's
+  secrets. One key compromise stays within a tenant, and rotating the master
+  key re-wraps the data keys without re-encrypting a credential. See
+  [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md).
+- **AES-256-GCM over Node's own crypto, no dependency.** Authenticated, so a
+  tampered blob fails to open rather than decrypting to garbage; the surface
+  used is four calls wide.
+- **The connection record and its secret live in different tables.**
+  `connections` holds no secret and is freely readable; `credentials` holds the
+  sealed bytes. Common reads never touch anything encrypted.
+- **The vault is the only code that decrypts, and only the connection layer
+  calls it, at call time.** That is what "the agent never sees API keys" means
+  concretely; the boundary check keeps `src/core/` from importing the vault.
+- **Credential isolation is a composite foreign key.** A credential can only
+  attach to a connection of the same tenant — a cross-tenant credential cannot
+  be inserted, not merely should not be.
+- **The vault is built only when a master key is configured.** A deployment
+  that connects nothing does not need one; starting it with a missing key would
+  be worse than starting without the vault.
+
 ## Approval
 
 - **An approval pause is a return, not a block.** A gated tool makes the agent

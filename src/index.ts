@@ -14,6 +14,14 @@ import pg from 'pg';
 
 import { PostgresApprovalStore } from './approval/postgres-approval-store.js';
 import type { ApprovalStore } from './approval/approval-store.js';
+import type { ConnectionStore } from './connections/connection-store.js';
+import { CredentialVault } from './connections/credential-vault.js';
+import { EnvelopeCipher } from './connections/envelope-cipher.js';
+import {
+  PostgresConnectionStore,
+  PostgresCredentialStore,
+  PostgresTenantKeyStore,
+} from './connections/postgres-connection-store.js';
 import { Agent } from './core/agent.js';
 import { loadPersona } from './core/persona.js';
 import { ToolRegistry } from './core/tool.js';
@@ -42,6 +50,13 @@ export interface Harness {
   readonly router: Router;
   readonly pools: PoolStore;
   readonly approvals: ApprovalStore;
+  readonly connections: ConnectionStore;
+  /**
+   * The credential vault. Present only when MASTER_ENCRYPTION_KEY is set — a
+   * deployment that connects nothing does not need it, and starting one with a
+   * missing key would be worse than starting without the vault.
+   */
+  readonly vault: CredentialVault | null;
   close(): Promise<void>;
 }
 
@@ -54,6 +69,8 @@ export interface HarnessOptions {
   readonly tools?: ToolRegistry;
   /** Products register their business modules here; the router uses them. */
   readonly modules?: ModuleRegistry;
+  /** Base64 master key for the credential vault; defaults to the env var. */
+  readonly masterEncryptionKey?: string;
 }
 
 /**
@@ -91,6 +108,18 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const modules = options.modules ?? new ModuleRegistry();
   const pools = new PostgresPoolStore(pool);
   const approvals = new PostgresApprovalStore(pool);
+  const connections = new PostgresConnectionStore(pool);
+
+  // The vault only exists if a master key is configured. Building it without
+  // one would fail; skipping it lets a deployment that connects nothing run.
+  const masterKey = options.masterEncryptionKey ?? process.env['MASTER_ENCRYPTION_KEY'];
+  const vault = masterKey
+    ? new CredentialVault(
+        EnvelopeCipher.fromBase64(masterKey),
+        new PostgresTenantKeyStore(pool),
+        new PostgresCredentialStore(pool),
+      )
+    : null;
 
   return {
     agent: new Agent({ gateway, sessions, tools, persona, approvals }),
@@ -101,6 +130,8 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     router: new Router(gateway, modules),
     pools,
     approvals,
+    connections,
+    vault,
     close: () => pool.end(),
   };
 }
@@ -116,6 +147,27 @@ export type {
 } from './approval/approval-store.js';
 export { InMemoryApprovalStore } from './approval/in-memory-approval-store.js';
 export { PostgresApprovalStore } from './approval/postgres-approval-store.js';
+export { ConnectionError } from './connections/connection-store.js';
+export type {
+  Connection,
+  ConnectionStatus,
+  ConnectionStore,
+  CreateConnectionInput,
+} from './connections/connection-store.js';
+export { CipherError, EnvelopeCipher } from './connections/envelope-cipher.js';
+export type { Sealed } from './connections/envelope-cipher.js';
+export { CredentialVault, VaultError } from './connections/credential-vault.js';
+export type { CredentialStore, TenantKeyStore } from './connections/credential-vault.js';
+export {
+  InMemoryConnectionStore,
+  InMemoryCredentialStore,
+  InMemoryTenantKeyStore,
+} from './connections/in-memory-connection-store.js';
+export {
+  PostgresConnectionStore,
+  PostgresCredentialStore,
+  PostgresTenantKeyStore,
+} from './connections/postgres-connection-store.js';
 export { loadPersona, parsePersona } from './core/persona.js';
 export type { Persona } from './core/persona.js';
 export { ToolRegistry, failed, ok } from './core/tool.js';

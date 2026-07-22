@@ -30,6 +30,7 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `ModelProvider` | `src/models/model-provider.ts` | `AnthropicProvider`, `GroqProvider` |
 | `SessionStore` | `src/memory/session-store.ts` | `PostgresSessionStore`, `InMemorySessionStore` |
 | `PoolStore` | `src/pools/pool-store.ts` | `PostgresPoolStore`, `InMemoryPoolStore` |
+| `ApprovalStore` | `src/approval/approval-store.ts` | `PostgresApprovalStore`, `InMemoryApprovalStore` |
 | `UsageRecorder` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden
@@ -78,11 +79,16 @@ without a network or an API bill.
    the task, retries transient failures, falls back to the next provider, and
    records what the call cost — attributed to the tenant and the conversation.
 4. **Act.** If the model asked for tools, the agent runs them (validating input
-   against each tool's Zod schema) and feeds the results back. Approval-gated
-   tools do not run until the approval queue exists — they fail closed.
+   against each tool's Zod schema) and feeds the results back. If any tool in
+   the turn is marked `requiresApproval`, the whole turn pauses: the agent
+   records pending approvals and returns `awaiting_approval`, running nothing.
+   A human decides, and `resume` continues from there. See
+   [ADR 0004](./adr/0004-human-approval.md).
 5. **Persist.** Every turn — the user message, each assistant turn, each tool
    result — is appended to the session as it happens, so a restart mid-turn
-   loses the in-flight call but not the conversation.
+   loses the in-flight call but not the conversation. A paused turn's state
+   lives entirely in the session and the approval queue, so the pause survives
+   a restart and holds no process open.
 
 ## Multi-tenancy
 
@@ -95,6 +101,8 @@ the database, not by application discipline:
   conversation is deleted.
 - `module_pools` is keyed on `(tenant_id, module_id, key)`, so no query can
   span a tenant or a module boundary.
+- `approvals` can only gate a tool call in a session of the same tenant, via a
+  composite foreign key, and a decision moves a row atomically.
 
 Integration tests prove each of these against the real schema, because an
 in-memory double could agree with a wrong constraint.
@@ -109,7 +117,8 @@ in-memory double could agree with a wrong constraint.
   not control — which is what the LGPD posture rules out. See
   [ADR 0002](./adr/0002-own-model-gateway.md).
 - Inbound channel messages are treated as untrusted input.
-- Destructive actions require human approval (phase 4).
+- Destructive actions can require human approval: a gated tool pauses the turn
+  until a human decides, and fails closed if no approval queue is wired.
 
 ## Engineering principles
 

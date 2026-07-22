@@ -25,6 +25,7 @@ Two kinds, kept apart on purpose:
 | [0001](./adr/0001-hexagonal-architecture.md) | Ports and adapters for the core |
 | [0002](./adr/0002-own-model-gateway.md) | Our own model gateway, not a routing service |
 | [0003](./adr/0003-central-router.md) | A central router on the cheap tier, evaluated before trusted |
+| [0004](./adr/0004-human-approval.md) | Human approval as a pause, not a block |
 
 ## Writing a new ADR
 

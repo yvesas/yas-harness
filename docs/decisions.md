@@ -56,6 +56,27 @@ ADR instead.
   blocks back unchanged, which the gateway port cannot express yet; the adapter
   drops those blocks rather than half-supporting the feature.
 
+## Approval
+
+- **An approval pause is a return, not a block.** A gated tool makes the agent
+  record pending approvals and return `awaiting_approval`; a later `resume`
+  continues. No process is held open, and the pause survives a restart because
+  its whole state is in the session and the approval queue. See
+  [ADR 0004](./adr/0004-human-approval.md).
+- **A turn with any gated call is all-or-nothing.** Nothing in the turn runs —
+  not even the ungated calls beside it — until every gate is decided, so a
+  half-run turn can never be observed.
+- **A decision is guarded in the `WHERE` clause.** Moving an approval off
+  `pending` only matches a still-pending row, so two operators deciding the
+  same approval race on the database and exactly one wins.
+- **A rejection reaches the model as a tool result with its reason**, not as a
+  failed turn, so the model can change course rather than just stop.
+- **A gated tool still fails closed when no approval queue is wired.** The
+  approval store is optional; without it, a product does not run sensitive
+  actions unchecked by omission.
+- **"Who decided" is an opaque string.** The harness does not model operators;
+  a product binds real identities to `decidedBy` itself.
+
 ## Core and storage
 
 - **Message order is a `seq` identity column, not `created_at`.** `now()` is
@@ -64,9 +85,6 @@ ADR instead.
 - **The agent passes a snapshot of history to the gateway, not its working
   array.** The loop keeps appending; an adapter must see the conversation as it
   was at call time.
-- **Approval-gated tools fail closed.** `requiresApproval` exists in the tool
-  contract now; until the approval queue lands (phase 4), the agent refuses
-  those tools rather than running them unchecked.
 - **A tool declares its input with a Zod schema, and the registry derives the
   JSON Schema the model sees.** One definition, so what is advertised cannot
   drift from what is validated.

@@ -1,0 +1,32 @@
+{
+  "requestTimeoutMs": 120000,
+  "attemptsPerModel": 2,
+
+  "models": {
+    "anthropic/opus": {
+      "provider": "anthropic",
+      "model": "claude-opus-4-8",
+      "tier": "premium",
+      "price": { "inputPerMTok": 5, "outputPerMTok": 25, "cachedInputPerMTok": 0.5 }
+    },
+    "anthropic/haiku": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5",
+      "tier": "cheap",
+      "price": { "inputPerMTok": 1, "outputPerMTok": 5, "cachedInputPerMTok": 0.1 }
+    },
+    "groq/llama-70b": {
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "tier": "cheap",
+      "price": { "inputPerMTok": 0.59, "outputPerMTok": 0.79, "cachedInputPerMTok": 0.59 }
+    }
+  },
+
+  "routes": {
+    "routing": ["groq/llama-70b", "anthropic/haiku"],
+    "simple": ["groq/llama-70b", "anthropic/haiku"],
+    "reasoning": ["anthropic/opus", "anthropic/haiku"],
+    "sensitive": ["anthropic/opus"]
+  }
+}

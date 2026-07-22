@@ -70,8 +70,18 @@ export interface ToolSchema {
   readonly inputSchema: Record<string, unknown>;
 }
 
+/**
+ * Who a call belongs to. Carried on the request so cost can be attributed to a
+ * tenant and a conversation without the core knowing how usage is recorded.
+ */
+export interface RequestAttribution {
+  readonly tenantId: string;
+  readonly sessionId?: string;
+}
+
 export interface ModelRequest {
   readonly task: TaskKind;
+  readonly attribution?: RequestAttribution;
   readonly system?: string;
   readonly messages: readonly ModelMessage[];
   readonly tools?: readonly ToolSchema[];

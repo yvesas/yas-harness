@@ -58,6 +58,22 @@ ADR instead.
 
 ## Connections and credentials
 
+- **Every source fits one resource-shaped contract** (list, read, search,
+  create, update, delete over a `Resource`). Adding Drive, Confluence or Notion
+  is registering a connector; the manager, vault and schema do not change.
+  Source-specific fields live in a `metadata` bag so translation loses nothing.
+  See [ADR 0006](./adr/0006-connector-contract.md).
+- **Editing is first-class, not read-only-first.** create/update/delete are in
+  the contract from the start; the dogfooding case and the products both need
+  to write back, and retrofitting write is worse than designing for it once.
+- **Capabilities are declared and gated.** A connector declares what it does;
+  the registry checks every declared capability has its method, and the manager
+  refuses an undeclared one. A connector may implement more than it declares (a
+  full connector in read-only mode), which is allowed on purpose.
+- **The connection manager is the credential seam.** It resolves the credential
+  from the vault and hands it to the connector for the length of the call; the
+  status and capability checks run before anything is decrypted. A connector
+  receives a credential and must never log, store or return it.
 - **Credentials use envelope encryption with a per-tenant data key.** A master
   key wraps each tenant's data key; the data key encrypts that tenant's
   secrets. One key compromise stays within a tenant, and rotating the master

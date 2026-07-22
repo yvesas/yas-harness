@@ -67,8 +67,8 @@ without a network or an API bill.
 | `src/memory/` | Session and conversation state |
 | `src/pools/` | Per-module data pools |
 | `src/telemetry/` | Model usage and cost |
-| `src/connections/` | External connections (phase 5) |
-| `src/approval/` | Human approval queue (phase 4) |
+| `src/connections/` | External connectors, connections and the credential vault |
+| `src/approval/` | Human approval queue |
 
 ## The path of a message
 
@@ -113,9 +113,14 @@ in-memory double could agree with a wrong constraint.
 
 - Credentials are stored sealed by envelope encryption — a master key wraps a
   per-tenant data key, which encrypts that tenant's secrets. Only the vault's
-  `resolve` decrypts, and only the connection layer calls it, at the moment of
-  an outbound call; the agent sees method names and results, never keys. See
-  [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md).
+  `resolve` decrypts, and only the connection manager calls it, at the moment
+  of an outbound call, handing the credential to a connector for the length of
+  that call. The agent asks to read or edit a resource and gets the resource;
+  it never sees a key. Adding a source (Drive, Confluence, Notion) is
+  registering a connector against one resource-shaped contract — nothing else
+  in the harness changes. See
+  [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md) and
+  [ADR 0006](./adr/0006-connector-contract.md).
 - We call model providers directly. A routing service would be a third party in
   the data path — every prompt and answer flowing through infrastructure we do
   not control — which is what the LGPD posture rules out. See

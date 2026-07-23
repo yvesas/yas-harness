@@ -62,6 +62,13 @@ ADR instead.
   contract.** Pages map to resources, storage-format body to content, cursor
   pagination to `nextCursor`, and Confluence's read-then-write version rule is
   hidden inside `update`. No product domain leaked in — a page is a document.
+- **GitHub is the third connector; it addresses a repo as the `parentId` and a
+  resource id is `owner/repo#number`.** GitHub has no site id (unlike Atlassian)
+  and issue bodies are Markdown (simpler than Jira's document tree). It declares
+  no `delete` capability, since GitHub does not delete issues over the API — a
+  connector legitimately exposing only what its source supports. Pull requests
+  that GitHub returns through the issues endpoint are dropped. Issues first;
+  discussions/projects (GraphQL) and code reading are later slices.
 - **Confluence and Jira are the first two connectors, over shared Atlassian
   plumbing.** Both use the same OAuth 3LO auth, `cloudId` discovery and
   `ex/{product}/{cloudId}` base, so that lives in one `AtlassianSite` helper and

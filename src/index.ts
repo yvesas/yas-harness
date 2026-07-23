@@ -210,6 +210,8 @@ export { ConfluenceConnector } from './connections/connectors/confluence-connect
 export type { ConfluenceConnectorOptions } from './connections/connectors/confluence-connector.js';
 export { JiraConnector } from './connections/connectors/jira-connector.js';
 export type { JiraConnectorOptions } from './connections/connectors/jira-connector.js';
+export { GitHubConnector } from './connections/connectors/github-connector.js';
+export type { GitHubConnectorOptions } from './connections/connectors/github-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

@@ -1,13 +1,30 @@
 {
-  "//": "Copy to connectors.json and fill in. Keyed by connector id. The client secret is NOT here — name its environment variable in clientSecretEnv and set that. A missing connectors.json is fine; the connection layer then runs without OAuth.",
+  "//": "Copy to connectors.json and fill in. Each key is a CONNECTOR ID (the connection's connectorId) — so confluence and jira each get an entry even though they share Atlassian OAuth. The client secret is NOT here — name its environment variable in clientSecretEnv and set that. A missing connectors.json is fine; the connection layer then runs without OAuth.",
 
-  "atlassian": {
+  "confluence": {
     "authorizationEndpoint": "https://auth.atlassian.com/authorize",
     "tokenEndpoint": "https://auth.atlassian.com/oauth/token",
     "clientId": "your-atlassian-client-id",
     "clientSecretEnv": "ATLASSIAN_CLIENT_SECRET",
     "scopes": ["read:confluence-content.all", "write:confluence-content", "offline_access"],
     "authorizationParams": { "audience": "api.atlassian.com", "prompt": "consent" }
+  },
+
+  "jira": {
+    "authorizationEndpoint": "https://auth.atlassian.com/authorize",
+    "tokenEndpoint": "https://auth.atlassian.com/oauth/token",
+    "clientId": "your-atlassian-client-id",
+    "clientSecretEnv": "ATLASSIAN_CLIENT_SECRET",
+    "scopes": ["read:jira-work", "write:jira-work", "offline_access"],
+    "authorizationParams": { "audience": "api.atlassian.com", "prompt": "consent" }
+  },
+
+  "github": {
+    "authorizationEndpoint": "https://github.com/login/oauth/authorize",
+    "tokenEndpoint": "https://github.com/login/oauth/access_token",
+    "clientId": "your-github-client-id",
+    "clientSecretEnv": "GITHUB_CLIENT_SECRET",
+    "scopes": ["repo", "read:org"]
   },
 
   "google-drive": {

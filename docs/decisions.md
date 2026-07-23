@@ -58,6 +58,14 @@ ADR instead.
 
 ## Connections and credentials
 
+- **The first real connector is Confluence Cloud, and it validated the
+  contract.** Pages map to resources, storage-format body to content, cursor
+  pagination to `nextCursor`, and Confluence's read-then-write version rule is
+  hidden inside `update`. No product domain leaked in — a page is a document.
+- **Confluence discovers its `cloudId` at runtime, not from the credential.**
+  The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
+  extra field, so the site id is fetched from `accessible-resources` and cached
+  per connection for the process lifetime instead of stored alongside the token.
 - **OAuth is mechanics, not web endpoints.** The harness builds the
   authorization URL, exchanges the code and refreshes the token; minting
   `state`, redirecting the user and receiving the callback are the product's

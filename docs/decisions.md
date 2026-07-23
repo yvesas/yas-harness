@@ -58,6 +58,24 @@ ADR instead.
 
 ## Connections and credentials
 
+- **OAuth is mechanics, not web endpoints.** The harness builds the
+  authorization URL, exchanges the code and refreshes the token; minting
+  `state`, redirecting the user and receiving the callback are the product's
+  job — the same boundary as approval. See
+  [ADR 0007](./adr/0007-oauth-and-transparent-refresh.md).
+- **Token refresh is transparent, inside an active connection.** A stale access
+  token is refreshed on next use (with a skew, to avoid racing expiry) and
+  stored back; the connector and agent only ever see a working token. A
+  connection becomes `expired` only when a refresh actually fails and
+  re-authorisation is needed — then the next call fails fast.
+- **OAuth providers are declared in `config/connectors.json`, secret from env.**
+  Endpoints, client id and scopes live in the file, keyed by connector id; the
+  client secret is named there by its environment variable and resolved at load
+  time, so no secret is committed. A missing named secret fails at startup.
+- **The manager takes a `CredentialResolver`, not the vault directly.** The
+  default reads the vault as-is (right for a static API key); the OAuth resolver
+  adds refresh. A non-OAuth connector's credential passes through untouched, so
+  both kinds coexist without a special case in the run path.
 - **Every source fits one resource-shaped contract** (list, read, search,
   create, update, delete over a `Resource`). Adding Drive, Confluence or Notion
   is registering a connector; the manager, vault and schema do not change.

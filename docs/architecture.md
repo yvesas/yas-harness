@@ -118,9 +118,13 @@ in-memory double could agree with a wrong constraint.
   that call. The agent asks to read or edit a resource and gets the resource;
   it never sees a key. Adding a source (Drive, Confluence, Notion) is
   registering a connector against one resource-shaped contract — nothing else
-  in the harness changes. See
-  [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md) and
-  [ADR 0006](./adr/0006-connector-contract.md).
+  in the harness changes. For OAuth sources the harness does the mechanics
+  (build the authorization URL, exchange the code, refresh the token) while a
+  product wires the callback; a stale token refreshes transparently on next
+  use, and a connection becomes `expired` only when a refresh truly fails. See
+  [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md),
+  [ADR 0006](./adr/0006-connector-contract.md) and
+  [ADR 0007](./adr/0007-oauth-and-transparent-refresh.md).
 - We call model providers directly. A routing service would be a third party in
   the data path — every prompt and answer flowing through infrastructure we do
   not control — which is what the LGPD posture rules out. See

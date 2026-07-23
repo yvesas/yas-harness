@@ -17,8 +17,13 @@ import type { ApprovalStore } from './approval/approval-store.js';
 import { ConnectionManager } from './connections/connection-manager.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
+import type { CredentialResolver } from './connections/credential-resolver.js';
+import { VaultCredentialResolver } from './connections/credential-resolver.js';
 import { CredentialVault } from './connections/credential-vault.js';
 import { EnvelopeCipher } from './connections/envelope-cipher.js';
+import { loadConnectorsConfig } from './connections/oauth-config.js';
+import { OAuthClient } from './connections/oauth.js';
+import { OAuthTokenRefresher } from './connections/oauth-token-refresher.js';
 import {
   PostgresConnectionStore,
   PostgresCredentialStore,
@@ -132,9 +137,19 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     : null;
 
   const connectors = options.connectors ?? new ConnectorRegistry();
-  // The manager needs the vault to resolve credentials; without a vault there
-  // is nothing to run a connector with.
-  const connectionManager = vault ? new ConnectionManager(connectors, connections, vault) : null;
+
+  // The manager needs a resolver, which needs the vault; without a vault there
+  // is nothing to run a connector with. When connectors declare OAuth
+  // providers, the resolver refreshes stale tokens transparently.
+  let connectionManager: ConnectionManager | null = null;
+  if (vault) {
+    const providers = await loadConnectorsConfig(join(configDir, 'connectors.json'));
+    const resolver: CredentialResolver =
+      providers.size > 0
+        ? new OAuthTokenRefresher(vault, new OAuthClient(), providers)
+        : new VaultCredentialResolver(vault);
+    connectionManager = new ConnectionManager(connectors, connections, resolver);
+  }
 
   return {
     agent: new Agent({ gateway, sessions, tools, persona, approvals }),
@@ -191,6 +206,19 @@ export { ConnectorRegistry } from './connections/connector-registry.js';
 export { ConnectionManager, ConnectionManagerError } from './connections/connection-manager.js';
 export { MemoryConnector } from './connections/memory-connector.js';
 export type { MemoryConnectorOptions } from './connections/memory-connector.js';
+export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
+export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
+export {
+  OAuthConfigError,
+  connectorsConfigSchema,
+  loadConnectorsConfig,
+  oauthProviderConfigSchema,
+  resolveProviders,
+} from './connections/oauth-config.js';
+export type { ConnectorsConfig, OAuthProviderConfig } from './connections/oauth-config.js';
+export { OAuthRefreshError, OAuthTokenRefresher } from './connections/oauth-token-refresher.js';
+export { VaultCredentialResolver } from './connections/credential-resolver.js';
+export type { CredentialResolver } from './connections/credential-resolver.js';
 export { CipherError, EnvelopeCipher } from './connections/envelope-cipher.js';
 export type { Sealed } from './connections/envelope-cipher.js';
 export { CredentialVault, VaultError } from './connections/credential-vault.js';

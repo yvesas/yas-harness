@@ -17,3 +17,6 @@ coverage/
 .DS_Store
 .idea/
 *.log
+
+# local connector config (secrets referenced by env)
+config/connectors.json

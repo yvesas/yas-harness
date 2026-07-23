@@ -28,6 +28,7 @@ Two kinds, kept apart on purpose:
 | [0004](./adr/0004-human-approval.md) | Human approval as a pause, not a block |
 | [0005](./adr/0005-connection-layer-and-credential-vault.md) | Our own connection layer, credentials sealed by envelope encryption |
 | [0006](./adr/0006-connector-contract.md) | One resource-shaped contract for every connector |
+| [0007](./adr/0007-oauth-and-transparent-refresh.md) | OAuth as mechanics, with transparent token refresh |
 
 ## Writing a new ADR
 

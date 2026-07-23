@@ -30,7 +30,9 @@ import type {
 } from './connector.js';
 import { ConnectorError } from './connector.js';
 import type { ConnectorRegistry } from './connector-registry.js';
-import type { CredentialVault } from './credential-vault.js';
+import type { Connection } from './connection-store.js';
+import type { CredentialResolver } from './credential-resolver.js';
+import { OAuthRefreshError } from './oauth-token-refresher.js';
 
 export class ConnectionManagerError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -42,12 +44,16 @@ export class ConnectionManagerError extends Error {
 export class ConnectionManager {
   readonly #connectors: ConnectorRegistry;
   readonly #connections: ConnectionStore;
-  readonly #vault: CredentialVault;
+  readonly #resolver: CredentialResolver;
 
-  constructor(connectors: ConnectorRegistry, connections: ConnectionStore, vault: CredentialVault) {
+  constructor(
+    connectors: ConnectorRegistry,
+    connections: ConnectionStore,
+    resolver: CredentialResolver,
+  ) {
     this.#connectors = connectors;
     this.#connections = connections;
-    this.#vault = vault;
+    this.#resolver = resolver;
   }
 
   list(tenantId: string, connectionId: string, options?: ListOptions): Promise<ResourcePage> {
@@ -106,8 +112,10 @@ export class ConnectionManager {
         `connection "${connectionId}" not found for tenant "${tenantId}"`,
       );
     }
-    // A revoked or errored connection must not be used. An expired one will be
-    // refreshable once OAuth lands; for now it is refused like the rest.
+    // A revoked, expired or errored connection must not be used. A merely
+    // stale OAuth token does not put a connection here — it stays active and
+    // the resolver refreshes it below; a connection reaches 'expired' only when
+    // a refresh has actually failed and re-authorisation is needed.
     if (connection.status !== 'active') {
       throw new ConnectionManagerError(
         `connection "${connectionId}" is ${connection.status}, not active`,
@@ -125,12 +133,32 @@ export class ConnectionManager {
       );
     }
 
-    const credential = await this.#vault.resolve(tenantId, connectionId);
+    const credential = await this.#resolve(connection);
     if (credential === null) {
       throw new ConnectionManagerError(`connection "${connectionId}" has no stored credential`);
     }
 
     const context: ConnectorContext = { tenantId, connectionId, credential };
     return operation(connector, context);
+  }
+
+  /**
+   * Resolve the credential, refreshing a stale OAuth token transparently. A
+   * refresh that fails outright downgrades the connection to 'expired' — the
+   * user must re-authorise — so the same call is not retried into the ground.
+   */
+  async #resolve(connection: Connection): Promise<unknown> {
+    try {
+      return await this.#resolver.resolve(connection);
+    } catch (error) {
+      if (error instanceof OAuthRefreshError) {
+        await this.#connections.setStatus(connection.tenantId, connection.id, 'expired');
+        throw new ConnectionManagerError(
+          `connection "${connection.id}" needs re-authorisation: ${error.message}`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
   }
 }

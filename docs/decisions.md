@@ -62,7 +62,12 @@ ADR instead.
   contract.** Pages map to resources, storage-format body to content, cursor
   pagination to `nextCursor`, and Confluence's read-then-write version rule is
   hidden inside `update`. No product domain leaked in — a page is a document.
-- **Confluence discovers its `cloudId` at runtime, not from the credential.**
+- **Confluence and Jira are the first two connectors, over shared Atlassian
+  plumbing.** Both use the same OAuth 3LO auth, `cloudId` discovery and
+  `ex/{product}/{cloudId}` base, so that lives in one `AtlassianSite` helper and
+  each connector writes only its endpoints and translation. Jira maps issues to
+  resources and flattens the Atlassian document format to and from text.
+- **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached
   per connection for the process lifetime instead of stored alongside the token.

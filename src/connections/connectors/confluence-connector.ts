@@ -26,10 +26,10 @@ import type {
   SearchOptions,
 } from '../connector.js';
 import { ConnectorError, ResourceNotFoundError } from '../connector.js';
-import { isOAuthToken } from '../oauth.js';
+
+import { AtlassianNotFound, AtlassianSite } from './atlassian-site.js';
 
 const CONNECTOR_ID = 'confluence';
-const ATLASSIAN_API = 'https://api.atlassian.com';
 const DEFAULT_LIMIT = 25;
 
 export interface ConfluenceConnectorOptions {
@@ -55,14 +55,15 @@ export class ConfluenceConnector implements Connector {
   readonly description = 'Confluence Cloud spaces and pages.';
   readonly capabilities = ['list', 'read', 'search', 'create', 'update', 'delete'] as const;
 
-  readonly #fetch: typeof globalThis.fetch;
-  readonly #apiBase: string;
-  /** cloudId is per-connection and discovered at runtime; cache it per call context. */
-  readonly #cloudIds = new Map<string, string>();
+  readonly #site: AtlassianSite;
 
   constructor(options: ConfluenceConnectorOptions = {}) {
-    this.#fetch = options.fetch ?? globalThis.fetch;
-    this.#apiBase = options.baseUrl ?? ATLASSIAN_API;
+    this.#site = new AtlassianSite({
+      connectorId: CONNECTOR_ID,
+      product: 'confluence',
+      fetch: options.fetch ?? globalThis.fetch,
+      ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
+    });
   }
 
   async list(context: ConnectorContext, options: ListOptions = {}): Promise<ResourcePage> {
@@ -172,80 +173,21 @@ export class ConfluenceConnector implements Connector {
     );
   }
 
-  /** One authenticated call against the connection's Confluence site. */
+  /** A call against the site, mapping a 404 to this connector's not-found. */
   async #api<T>(
     context: ConnectorContext,
     method: string,
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const token = this.#accessToken(context);
-    const cloudId = await this.#cloudId(context, token);
-    const url = `${this.#apiBase}/ex/confluence/${cloudId}${path}`;
-
-    const response = await this.#fetch(url, {
-      method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: 'application/json',
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-
-    if (response.status === 404) {
-      throw new ResourceNotFoundError(this.id, path);
+    try {
+      return await this.#site.request<T>(context, method, path, body);
+    } catch (error) {
+      if (error instanceof AtlassianNotFound) {
+        throw new ResourceNotFoundError(this.id, path);
+      }
+      throw error;
     }
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new ConnectorError(
-        `confluence responded ${response.status}: ${text.slice(0, 500)}`,
-        this.id,
-      );
-    }
-    // DELETE and some updates return no body.
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    return (await response.json()) as T;
-  }
-
-  /**
-   * The cloudId identifies which Atlassian site this connection points at. It
-   * is not in the credential — a refresh would drop it — so it is discovered
-   * from the token and cached for the connection's lifetime in this process.
-   */
-  async #cloudId(context: ConnectorContext, token: string): Promise<string> {
-    const cached = this.#cloudIds.get(context.connectionId);
-    if (cached) {
-      return cached;
-    }
-
-    const response = await this.#fetch(`${this.#apiBase}/oauth/token/accessible-resources`, {
-      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-    });
-    if (!response.ok) {
-      throw new ConnectorError(
-        `cannot list accessible Atlassian sites: ${response.status}`,
-        this.id,
-      );
-    }
-
-    const sites = (await response.json()) as { id?: string }[];
-    const cloudId = sites[0]?.id;
-    if (!cloudId) {
-      throw new ConnectorError('the connected account has no accessible Confluence site', this.id);
-    }
-
-    this.#cloudIds.set(context.connectionId, cloudId);
-    return cloudId;
-  }
-
-  #accessToken(context: ConnectorContext): string {
-    if (!isOAuthToken(context.credential)) {
-      throw new ConnectorError('confluence connection has no OAuth token', this.id);
-    }
-    return context.credential.accessToken;
   }
 }
 

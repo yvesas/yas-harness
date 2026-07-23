@@ -68,7 +68,7 @@ without a network or an API bill.
 | `src/pools/` | Per-module data pools |
 | `src/telemetry/` | Model usage and cost |
 | `src/connections/` | External connectors, connections and the credential vault |
-| `src/connections/connectors/` | Concrete connectors (Confluence today) |
+| `src/connections/connectors/` | Concrete connectors (Confluence, Jira) and shared Atlassian plumbing |
 | `src/approval/` | Human approval queue |
 
 ## The path of a message

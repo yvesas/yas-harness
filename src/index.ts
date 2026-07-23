@@ -208,6 +208,8 @@ export { MemoryConnector } from './connections/memory-connector.js';
 export type { MemoryConnectorOptions } from './connections/memory-connector.js';
 export { ConfluenceConnector } from './connections/connectors/confluence-connector.js';
 export type { ConfluenceConnectorOptions } from './connections/connectors/confluence-connector.js';
+export { JiraConnector } from './connections/connectors/jira-connector.js';
+export type { JiraConnectorOptions } from './connections/connectors/jira-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

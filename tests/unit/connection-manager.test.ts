@@ -16,6 +16,7 @@ import { ConnectionManager } from '../../src/connections/connection-manager.js';
 import type { Connector, ConnectorContext } from '../../src/connections/connector.js';
 import { ConnectorError } from '../../src/connections/connector.js';
 import { ConnectorRegistry } from '../../src/connections/connector-registry.js';
+import { VaultCredentialResolver } from '../../src/connections/credential-resolver.js';
 import { CredentialVault } from '../../src/connections/credential-vault.js';
 import { EnvelopeCipher } from '../../src/connections/envelope-cipher.js';
 import {
@@ -40,7 +41,7 @@ beforeEach(() => {
     new InMemoryTenantKeyStore(),
     new InMemoryCredentialStore(),
   );
-  manager = new ConnectionManager(connectors, connections, vault);
+  manager = new ConnectionManager(connectors, connections, new VaultCredentialResolver(vault));
 });
 
 async function activeConnection(connectorId = 'drive'): Promise<string> {

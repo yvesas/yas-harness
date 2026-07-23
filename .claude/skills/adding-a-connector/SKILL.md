@@ -85,12 +85,30 @@ Register once, at startup. The manager then routes any connection whose
       supported, an edit round-trip
 - [ ] No business/product domain in the connector
 
+## OAuth connectors
+
+If the source authenticates with OAuth, you do **not** write the flow — the
+connection layer does the mechanics and refreshes tokens transparently:
+
+1. Declare the provider in `config/connectors.json`, keyed by the connector id
+   (`config/connectors.example.json` shows Atlassian and Google Drive). Put the
+   client secret's *environment variable name* in `clientSecretEnv`, never the
+   secret.
+2. A product wires two endpoints using the harness: one that redirects the user
+   to `OAuthClient.buildAuthorizationUrl(...)`, and a callback that calls
+   `exchangeCode(...)` and stores the token in the vault against a new
+   connection. The product mints and checks the `state` (CSRF defence).
+3. From then on, your connector just reads `ctx.credential` — it is an
+   `OAuthToken`, always fresh. The manager refreshed it if needed before the
+   call; you never handle refresh.
+
+A connector for a source that uses a static API key needs none of this — the
+key is stored in the vault and passed through untouched.
+
 ## Notes
 
 - The reference implementation is `MemoryConnector` (`src/connections/
   memory-connector.ts`) — it implements the whole contract and is the shape to
   copy.
-- OAuth and token refresh are the connection layer's job (the vault stores the
-  secret; refresh is wired around the manager), not the connector's.
 - The manager checks the connection is active and the capability is supported
-  *before* decrypting the credential.
+  *before* resolving (and refreshing) the credential.

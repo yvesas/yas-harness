@@ -67,8 +67,25 @@ ADR instead.
   and issue bodies are Markdown (simpler than Jira's document tree). It declares
   no `delete` capability, since GitHub does not delete issues over the API — a
   connector legitimately exposing only what its source supports. Pull requests
-  that GitHub returns through the issues endpoint are dropped. Issues first;
-  discussions/projects (GraphQL) and code reading are later slices.
+  that GitHub returns through the issues endpoint are dropped. Issues came first;
+  discussions and projects followed on GraphQL; code reading is a later slice.
+- **The GitHub connector is multi-type, routed by an id discriminator.** One
+  connection reaches issues (REST), discussions and Projects v2 (GraphQL), so it
+  is one connector with several resource kinds rather than three connectors. The
+  id names the kind: `owner/repo#number` (issue), `discussion:owner/repo#number`,
+  `project:owner/number`. Issues and discussions hang off a repository; a project
+  hangs off an owner (a user _or_ an org), so its container is the owner login,
+  not a repo. A tiny GraphQL client (`github-graphql.ts`) is the shared GraphQL
+  transport, mapping a `NOT_FOUND` error to a missing resource like a REST 404.
+- **Projects resolve user-vs-org in a single query via `ProjectV2Owner`.** A
+  project's owner may be a user or an organization, and GitHub has no unified
+  login-to-projects field on either. Rather than probe both or ask the caller
+  which it is, the queries go through `repositoryOwner(login:)` and spread
+  `... on ProjectV2Owner` — both `User` and `Organization` implement it — so one
+  query reaches the project without the connector knowing the owner's kind. The
+  project readme maps to `content`; its short description rides in metadata.
+  `createProjectV2` takes only a title, so a body given at create is applied as
+  a follow-up readme update, keeping create's `content` first-class.
 - **Confluence and Jira are the first two connectors, over shared Atlassian
   plumbing.** Both use the same OAuth 3LO auth, `cloudId` discovery and
   `ex/{product}/{cloudId}` base, so that lives in one `AtlassianSite` helper and

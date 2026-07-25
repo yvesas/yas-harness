@@ -74,7 +74,13 @@ network and what allows swapping a provider without a rewrite.
 Multi-tenant from day one: every table holding user data carries `tenant_id`,
 enforced by a database constraint rather than by application discipline alone.
 
-Each folder under `src/` documents its own responsibility and boundary.
+Each folder under `src/` documents its own responsibility and boundary. For the
+full picture — the layers, the ports and their adapters, the path a message
+takes, and the decisions behind them — see [`docs/`](./docs/):
+
+- [Architecture overview](./docs/architecture.md)
+- [Architecture Decision Records](./docs/adr/)
+- [Design decisions](./docs/decisions.md)
 
 ## Security
 

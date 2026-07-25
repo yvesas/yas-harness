@@ -2,20 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Adapter: Anthropic behind the ModelGateway port.
+ * Adapter: Anthropic behind the ModelProvider port.
  *
  * Called directly, with no third-party router in between — an intermediary
  * would be one more party in the data path, which is exactly what the LGPD
  * posture rules out.
+ *
+ * It does one call. Which model to use, whether to retry and what it cost are
+ * the routed gateway's business, not this file's.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 
 import type {
   ContentPart,
-  ModelGateway,
   ModelMessage,
-  ModelRequest,
   ModelResponse,
   ResponsePart,
   StopReason,
@@ -23,69 +24,56 @@ import type {
   TokenUsage,
 } from './model-gateway.js';
 import { ModelGatewayError } from './model-gateway.js';
+import type { ModelProvider, ProviderCall } from './model-provider.js';
 
 const PROVIDER = 'anthropic';
-
-/**
- * Which model serves which kind of work.
- *
- * `sensitive` deliberately shares the capable model with `reasoning`: getting
- * a balance wrong costs more than the tokens saved. Selection strategy, model
- * fallback and cost accounting belong to the gateway layer above this adapter.
- */
-export const DEFAULT_MODELS: Readonly<Record<TaskKind, string>> = {
-  routing: 'claude-haiku-4-5',
-  simple: 'claude-haiku-4-5',
-  reasoning: 'claude-opus-4-8',
-  sensitive: 'claude-opus-4-8',
-};
 
 /** Non-streaming ceiling: high enough to be useful, low enough to not time out. */
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
-export interface AnthropicGatewayOptions {
+export interface AnthropicProviderOptions {
   /** Defaults to the SDK's own resolution (ANTHROPIC_API_KEY, or a profile). */
   readonly apiKey?: string;
-  readonly models?: Partial<Record<TaskKind, string>>;
   readonly maxOutputTokens?: number;
   /** Injected in tests; production leaves it unset. */
   readonly client?: Anthropic;
 }
 
-export class AnthropicGateway implements ModelGateway {
+export class AnthropicProvider implements ModelProvider {
+  readonly name = PROVIDER;
   readonly #client: Anthropic;
-  readonly #models: Record<TaskKind, string>;
   readonly #maxOutputTokens: number;
 
-  constructor(options: AnthropicGatewayOptions = {}) {
+  constructor(options: AnthropicProviderOptions = {}) {
     this.#client =
       options.client ??
       new Anthropic(options.apiKey === undefined ? {} : { apiKey: options.apiKey });
-    this.#models = { ...DEFAULT_MODELS, ...options.models };
     this.#maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
   }
 
-  async complete(request: ModelRequest): Promise<ModelResponse> {
-    const model = this.#models[request.task];
+  async invoke({ model, request, signal }: ProviderCall): Promise<ModelResponse> {
     const startedAt = performance.now();
 
     let message: Anthropic.Message;
     try {
-      message = await this.#client.messages.create({
-        model,
-        max_tokens: request.maxOutputTokens ?? this.#maxOutputTokens,
-        ...(request.system === undefined ? {} : { system: request.system }),
-        messages: request.messages.map(toAnthropicMessage),
-        ...(request.tools && request.tools.length > 0
-          ? {
-              tools: request.tools.map((tool) => ({
-                name: tool.name,
-                description: tool.description,
-                input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
-              })),
-            }
-          : {}),
-      });
+      message = await this.#client.messages.create(
+        {
+          model,
+          max_tokens: request.maxOutputTokens ?? this.#maxOutputTokens,
+          ...(request.system === undefined ? {} : { system: request.system }),
+          messages: request.messages.map(toAnthropicMessage),
+          ...(request.tools && request.tools.length > 0
+            ? {
+                tools: request.tools.map((tool) => ({
+                  name: tool.name,
+                  description: tool.description,
+                  input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
+                })),
+              }
+            : {}),
+        },
+        signal ? { signal } : {},
+      );
     } catch (error) {
       throw toGatewayError(error, request.task);
     }

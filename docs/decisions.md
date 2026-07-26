@@ -146,6 +146,15 @@ ADR instead.
 - **Editing is first-class, not read-only-first.** create/update/delete are in
   the contract from the start; the dogfooding case and the products both need
   to write back, and retrofitting write is worse than designing for it once.
+- **Connected data is cached as `Resource` snapshots, read-through and
+  stale-tolerant.** The cache keys on `(tenant_id, connection_id, resource_id)`
+  and cascades with its connection, like credentials. `CachedConnections` serves
+  a snapshot while fresh, fetches and caches on a miss, and — when the source is
+  down — serves the last snapshot rather than an error; writes are write-through.
+  Keeping it warm is a mechanic, not a scheduler: `refresh` (polling, prunes what
+  vanished, but never against a truncated listing) and `invalidate` (webhook),
+  with `getCached`/`listCached` for offline browse. See
+  [ADR 0008](./adr/0008-resource-cache.md).
 - **Capabilities are declared and gated.** A connector declares what it does;
   the registry checks every declared capability has its method, and the manager
   refuses an undeclared one. A connector may implement more than it declares (a

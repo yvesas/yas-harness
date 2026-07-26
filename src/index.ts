@@ -14,6 +14,7 @@ import pg from 'pg';
 
 import { PostgresApprovalStore } from './approval/postgres-approval-store.js';
 import type { ApprovalStore } from './approval/approval-store.js';
+import { CachedConnections } from './connections/cached-connections.js';
 import { ConnectionManager } from './connections/connection-manager.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
@@ -22,6 +23,8 @@ import { VaultCredentialResolver } from './connections/credential-resolver.js';
 import { CredentialVault } from './connections/credential-vault.js';
 import { EnvelopeCipher } from './connections/envelope-cipher.js';
 import { loadConnectorsConfig } from './connections/oauth-config.js';
+import { PostgresResourceCacheStore } from './connections/postgres-resource-cache-store.js';
+import type { ResourceCacheStore } from './connections/resource-cache-store.js';
 import { OAuthClient } from './connections/oauth.js';
 import { OAuthTokenRefresher } from './connections/oauth-token-refresher.js';
 import {
@@ -70,6 +73,13 @@ export interface Harness {
    * at call time. Present only when the vault is — it needs one to resolve.
    */
   readonly connectionManager: ConnectionManager | null;
+  /** Snapshots of connected resources; browsable and prunable on its own. */
+  readonly resourceCache: ResourceCacheStore;
+  /**
+   * The connection manager behind a read-through/refresh/invalidate cache.
+   * Present only when the connection manager is.
+   */
+  readonly cachedConnections: CachedConnections | null;
   close(): Promise<void>;
 }
 
@@ -137,11 +147,14 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     : null;
 
   const connectors = options.connectors ?? new ConnectorRegistry();
+  const resourceCache = new PostgresResourceCacheStore(pool);
 
   // The manager needs a resolver, which needs the vault; without a vault there
   // is nothing to run a connector with. When connectors declare OAuth
-  // providers, the resolver refreshes stale tokens transparently.
+  // providers, the resolver refreshes stale tokens transparently. The cache
+  // wraps the manager once it exists, so products get read-through for free.
   let connectionManager: ConnectionManager | null = null;
+  let cachedConnections: CachedConnections | null = null;
   if (vault) {
     const providers = await loadConnectorsConfig(join(configDir, 'connectors.json'));
     const resolver: CredentialResolver =
@@ -149,6 +162,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
         ? new OAuthTokenRefresher(vault, new OAuthClient(), providers)
         : new VaultCredentialResolver(vault);
     connectionManager = new ConnectionManager(connectors, connections, resolver);
+    cachedConnections = new CachedConnections(connectionManager, resourceCache);
   }
 
   return {
@@ -164,6 +178,8 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     connectors,
     vault,
     connectionManager,
+    resourceCache,
+    cachedConnections,
     close: () => pool.end(),
   };
 }
@@ -204,6 +220,21 @@ export type {
 } from './connections/connector.js';
 export { ConnectorRegistry } from './connections/connector-registry.js';
 export { ConnectionManager, ConnectionManagerError } from './connections/connection-manager.js';
+export { CachedConnections } from './connections/cached-connections.js';
+export type {
+  ConnectionOperations,
+  CachedConnectionsOptions,
+  RefreshSummary,
+} from './connections/cached-connections.js';
+export { InMemoryResourceCacheStore } from './connections/in-memory-resource-cache-store.js';
+export { PostgresResourceCacheStore } from './connections/postgres-resource-cache-store.js';
+export { ResourceCacheError } from './connections/resource-cache-store.js';
+export type {
+  CacheScope,
+  CacheListOptions,
+  CachedResource,
+  ResourceCacheStore,
+} from './connections/resource-cache-store.js';
 export { MemoryConnector } from './connections/memory-connector.js';
 export type { MemoryConnectorOptions } from './connections/memory-connector.js';
 export { ConfluenceConnector } from './connections/connectors/confluence-connector.js';

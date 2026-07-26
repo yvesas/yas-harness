@@ -212,6 +212,8 @@ export { JiraConnector } from './connections/connectors/jira-connector.js';
 export type { JiraConnectorOptions } from './connections/connectors/jira-connector.js';
 export { GitHubConnector } from './connections/connectors/github-connector.js';
 export type { GitHubConnectorOptions } from './connections/connectors/github-connector.js';
+export { GoogleDriveConnector } from './connections/connectors/google-drive-connector.js';
+export type { GoogleDriveConnectorOptions } from './connections/connectors/google-drive-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

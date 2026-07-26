@@ -2,28 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * A connector for GitHub, covering issues, discussions and projects.
+ * A connector for GitHub, covering issues, discussions, projects and code.
  *
- * One connection (one OAuth token) reaches all three, so this is one connector
- * with several resource kinds, routed by a discriminator in the id. Issues use
- * the REST API; discussions and projects (Projects v2) use GitHub's GraphQL
- * API. The kinds differ enough that the connector keeps them apart internally,
- * but a product sees one `github` connector and the same resource shape for all.
+ * One connection (one OAuth token) reaches them all, so this is one connector
+ * with several resource kinds, routed by a discriminator in the id. Issues and
+ * code use the REST API; discussions and projects (Projects v2) use GitHub's
+ * GraphQL API. The kinds differ enough that the connector keeps them apart
+ * internally, but a product sees one `github` connector and the same resource
+ * shape for all.
  *
- * GitHub has no site id. Issues and discussions live under a repository
+ * GitHub has no site id. Issues, discussions and code live under a repository
  * (`owner/repo`); a project lives under an owner (a user or an org):
  *  - an issue id is `owner/repo#number`
  *  - a discussion id is `discussion:owner/repo#number`
  *  - a project id is `project:owner/number`
- * The container (repo or owner login) is addressed as the `parentId`, and the
- * kind is chosen by `options.type` / `draft.type` (`"discussion"`, `"project"`,
- * otherwise issue).
+ *  - a code id is `code:owner/repo:path` (a file or a directory)
+ * The container (repo, owner login, or a directory) is addressed as the
+ * `parentId`, and the kind is chosen by `options.type` / `draft.type`
+ * (`"discussion"`, `"project"`, `"code"`, otherwise issue).
  *
- * No kind declares `delete` — GitHub does not delete issues over the API, and
- * discussion/project deletion is left out of these slices — a connector
- * legitimately exposing only what it supports. Code reading is a later slice.
+ * Code is read-only here: `list` browses a directory and `read` fetches a
+ * file's text — writing code means commits and pull requests, out of this
+ * slice. And no kind declares `delete`: GitHub does not delete issues over the
+ * API, and discussion/project deletion is left out too — a connector
+ * legitimately exposing only what it supports.
  *
- * Nothing product-domain here: a GitHub issue, discussion or project is a
+ * Nothing product-domain here: a GitHub issue, discussion, project or file is a
  * record the same in a language tutor and a CRM. Written against `fetch`; no
  * dependency.
  */
@@ -50,6 +54,8 @@ const API_VERSION = '2022-11-28';
 const DEFAULT_LIMIT = 25;
 const DISCUSSION_PREFIX = 'discussion:';
 const PROJECT_PREFIX = 'project:';
+const CODE_PREFIX = 'code:';
+const SLASH = '/'.charCodeAt(0);
 
 export interface GitHubConnectorOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -96,6 +102,19 @@ interface GitHubProject {
   updatedAt?: string;
 }
 
+/** One entry from the repository contents API — a file or a directory. */
+interface GitHubContent {
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  html_url: string | null;
+  /** Base64 body, present only when reading a single file. */
+  content?: string;
+  encoding?: string;
+}
+
 /** A resource id decoded into which repo and which kind it names. */
 interface Ref {
   readonly kind: 'issue' | 'discussion';
@@ -110,12 +129,19 @@ interface ProjectRef {
   readonly number: number;
 }
 
+/** A code id decoded into its repo and a path within it (empty = repo root). */
+interface CodeRef {
+  readonly owner: string;
+  readonly repo: string;
+  readonly path: string;
+}
+
 export class GitHubConnector implements Connector {
   readonly id = CONNECTOR_ID;
   readonly description =
-    'GitHub issues, discussions and projects across a user’s repositories and orgs.';
+    'GitHub issues, discussions, projects and code across a user’s repositories and orgs.';
   // No delete: GitHub does not delete issues over the API, and discussion /
-  // project deletion is out of these slices.
+  // project deletion is out of these slices. Code is read-only.
   readonly capabilities: readonly ConnectorCapability[] = [
     'list',
     'read',
@@ -137,12 +163,14 @@ export class GitHubConnector implements Connector {
   list(context: ConnectorContext, options: ListOptions = {}): Promise<ResourcePage> {
     if (options.type === 'discussion') return this.#listDiscussions(context, options);
     if (options.type === 'project') return this.#listProjects(context, options);
+    if (options.type === 'code') return this.#listCode(context, options);
     return this.#listIssues(context, options);
   }
 
   // async so a parse failure surfaces as a rejected promise, not a throw.
   async read(context: ConnectorContext, id: string): Promise<Resource> {
     if (id.startsWith(PROJECT_PREFIX)) return this.#readProject(context, parseProjectRef(id));
+    if (id.startsWith(CODE_PREFIX)) return this.#readCode(context, parseCodeRef(id));
     const ref = parseRef(id);
     return ref.kind === 'discussion'
       ? this.#readDiscussion(context, ref)
@@ -166,7 +194,10 @@ export class GitHubConnector implements Connector {
       : this.#updateIssue(context, ref, patch);
   }
 
-  /** Search covers issues (REST). Discussion search is a later slice. */
+  /**
+   * Search covers issues (REST). Discussion and code search are later slices —
+   * the shape's `search` has no type selector to tell them apart yet.
+   */
   async search(
     context: ConnectorContext,
     query: string,
@@ -501,6 +532,50 @@ export class GitHubConnector implements Connector {
     return projectToResource(updated.updateProjectV2.projectV2, ref.owner);
   }
 
+  // --- code (REST, repository contents) -------------------------------------
+
+  async #listCode(context: ConnectorContext, options: ListOptions): Promise<ResourcePage> {
+    const container = options.parentId;
+    if (!container) {
+      throw new ConnectorError(
+        'listing GitHub code needs a parent (a repo "owner/repo" or a directory id)',
+        this.id,
+      );
+    }
+    const ref = container.startsWith(CODE_PREFIX)
+      ? parseCodeRef(container)
+      : codeRootRef(container);
+
+    const body = await this.#rest<GitHubContent[] | GitHubContent>(
+      context,
+      'GET',
+      contentsPath(ref),
+    );
+    // A directory comes back as an array; a file path would return one object,
+    // but a list is a directory browse, so anything else is an empty page. The
+    // contents API returns a directory's entries in one unpaginated shot.
+    const entries = Array.isArray(body) ? body : [];
+    return {
+      resources: entries.map((entry) => contentToResource(entry, ref.owner, ref.repo, container)),
+      nextCursor: null,
+    };
+  }
+
+  async #readCode(context: ConnectorContext, ref: CodeRef): Promise<Resource> {
+    const body = await this.#rest<GitHubContent[] | GitHubContent>(
+      context,
+      'GET',
+      contentsPath(ref),
+    );
+    const parentId = parentContainerId(ref.owner, ref.repo, ref.path);
+    // A directory path comes back as an array; represent it as a dir resource —
+    // its children come from `list`, not from a single read.
+    if (Array.isArray(body)) {
+      return dirToResource(ref, parentId);
+    }
+    return contentToResource(body, ref.owner, ref.repo, parentId);
+  }
+
   // --- transport ------------------------------------------------------------
 
   async #rest<T>(
@@ -726,6 +801,55 @@ function projectToResource(project: GitHubProject, owner: string): Resource {
   };
 }
 
+function contentToResource(
+  entry: GitHubContent,
+  owner: string,
+  repo: string,
+  parentId: string,
+): Resource {
+  const isDir = entry.type === 'dir';
+  // The body arrives base64 only when a single file is read; in a listing it is
+  // absent, so content stays null there, as the contract asks.
+  const content =
+    entry.type === 'file' && entry.content !== undefined && entry.encoding === 'base64'
+      ? decodeBase64(entry.content)
+      : null;
+  return {
+    id: `${CODE_PREFIX}${owner}/${repo}:${entry.path}`,
+    type: isDir ? 'dir' : 'file',
+    title: entry.name,
+    content,
+    mimeType: isDir ? null : guessMimeType(entry.name),
+    parentId,
+    url: entry.html_url,
+    metadata: {
+      path: entry.path,
+      repo: `${owner}/${repo}`,
+      sha: entry.sha,
+      size: entry.size,
+      kind: entry.type,
+    },
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
+function dirToResource(ref: CodeRef, parentId: string): Resource {
+  const name = ref.path === '' ? ref.repo : ref.path.slice(ref.path.lastIndexOf('/') + 1);
+  return {
+    id: `${CODE_PREFIX}${ref.owner}/${ref.repo}:${ref.path}`,
+    type: 'dir',
+    title: name,
+    content: null,
+    mimeType: null,
+    parentId,
+    url: null,
+    metadata: { path: ref.path, repo: `${ref.owner}/${ref.repo}`, kind: 'dir' },
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
 // --- id / repo helpers ------------------------------------------------------
 
 const REF = /^([^/]+)\/([^/#]+)#(\d+)$/;
@@ -760,6 +884,87 @@ function parseProjectRef(id: string): ProjectRef {
     );
   }
   return { owner: match[1]!, number: Number(match[2]) };
+}
+
+/**
+ * Decode a `code:owner/repo:path` id. The first colon after the prefix splits
+ * the repo from the path; the path may be empty (the repo root) or hold further
+ * slashes. `code:owner/repo` with no path names the root too.
+ */
+function parseCodeRef(id: string): CodeRef {
+  const rest = id.slice(CODE_PREFIX.length);
+  const colon = rest.indexOf(':');
+  const repoPart = colon === -1 ? rest : rest.slice(0, colon);
+  const path = colon === -1 ? '' : rest.slice(colon + 1);
+  const [owner, repo] = repoPart.split('/');
+  if (!owner || !repo || repo.includes('/')) {
+    throw new ConnectorError(
+      `invalid GitHub code id "${id}"; expected "code:owner/repo:path"`,
+      CONNECTOR_ID,
+    );
+  }
+  return { owner, repo, path: trimSlashes(path) };
+}
+
+/** Strip leading and trailing slashes in linear time (no backtracking regex). */
+function trimSlashes(path: string): string {
+  let start = 0;
+  let end = path.length;
+  while (start < end && path.charCodeAt(start) === SLASH) start++;
+  while (end > start && path.charCodeAt(end - 1) === SLASH) end--;
+  return path.slice(start, end);
+}
+
+/** A bare `owner/repo` container as a code ref at the repo root. */
+function codeRootRef(repo: string): CodeRef {
+  const [owner, name] = splitRepo(repo);
+  return { owner, repo: name, path: '' };
+}
+
+/** The REST contents path for a code ref, url-encoding each path segment. */
+function contentsPath(ref: CodeRef): string {
+  const encoded =
+    ref.path === '' ? '' : `/${ref.path.split('/').map(encodeURIComponent).join('/')}`;
+  return `/repos/${ref.owner}/${ref.repo}/contents${encoded}`;
+}
+
+/** The container id for the directory holding `path` — the repo root if top-level. */
+function parentContainerId(owner: string, repo: string, path: string): string {
+  const slash = path.lastIndexOf('/');
+  const parentPath = slash === -1 ? '' : path.slice(0, slash);
+  return parentPath === '' ? `${owner}/${repo}` : `${CODE_PREFIX}${owner}/${repo}:${parentPath}`;
+}
+
+/** GitHub returns file bodies as base64 (with newlines); decode to text. */
+function decodeBase64(base64: string): string {
+  return Buffer.from(base64, 'base64').toString('utf-8');
+}
+
+/** A best-effort mime type from a file's extension; text/plain otherwise. */
+function guessMimeType(name: string): string {
+  const dot = name.lastIndexOf('.');
+  const ext = dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
+  switch (ext) {
+    case 'md':
+    case 'markdown':
+      return 'text/markdown';
+    case 'json':
+      return 'application/json';
+    case 'html':
+    case 'htm':
+      return 'text/html';
+    case 'css':
+      return 'text/css';
+    case 'csv':
+      return 'text/csv';
+    case 'xml':
+      return 'application/xml';
+    case 'yml':
+    case 'yaml':
+      return 'application/yaml';
+    default:
+      return 'text/plain';
+  }
 }
 
 /** Validate and return `owner/repo` for use in a REST path. */

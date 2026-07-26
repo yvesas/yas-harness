@@ -68,15 +68,17 @@ ADR instead.
   no `delete` capability, since GitHub does not delete issues over the API — a
   connector legitimately exposing only what its source supports. Pull requests
   that GitHub returns through the issues endpoint are dropped. Issues came first;
-  discussions and projects followed on GraphQL; code reading is a later slice.
+  discussions, projects and code followed.
 - **The GitHub connector is multi-type, routed by an id discriminator.** One
-  connection reaches issues (REST), discussions and Projects v2 (GraphQL), so it
-  is one connector with several resource kinds rather than three connectors. The
-  id names the kind: `owner/repo#number` (issue), `discussion:owner/repo#number`,
-  `project:owner/number`. Issues and discussions hang off a repository; a project
-  hangs off an owner (a user _or_ an org), so its container is the owner login,
-  not a repo. A tiny GraphQL client (`github-graphql.ts`) is the shared GraphQL
-  transport, mapping a `NOT_FOUND` error to a missing resource like a REST 404.
+  connection reaches issues and code (REST) and discussions and Projects v2
+  (GraphQL), so it is one connector with several resource kinds rather than four
+  connectors. The id names the kind: `owner/repo#number` (issue),
+  `discussion:owner/repo#number`, `project:owner/number`, `code:owner/repo:path`
+  (a file or directory). Issues, discussions and code hang off a repository; a
+  project hangs off an owner (a user _or_ an org), so its container is the owner
+  login, not a repo. A tiny GraphQL client (`github-graphql.ts`) is the shared
+  GraphQL transport, mapping a `NOT_FOUND` error to a missing resource like a
+  REST 404.
 - **Projects resolve user-vs-org in a single query via `ProjectV2Owner`.** A
   project's owner may be a user or an organization, and GitHub has no unified
   login-to-projects field on either. Rather than probe both or ask the caller
@@ -86,6 +88,15 @@ ADR instead.
   project readme maps to `content`; its short description rides in metadata.
   `createProjectV2` takes only a title, so a body given at create is applied as
   a follow-up readme update, keeping create's `content` first-class.
+- **Code reading is read-only, over the REST contents API.** `list` browses a
+  directory and `read` fetches a file, mapping a directory to a `dir` resource
+  and a file to a `file` whose base64 body is decoded to text on read (and left
+  null in a listing, as the contract asks). A code id is `code:owner/repo:path`;
+  a bare `owner/repo` or a `code:` directory id is the browse container, and a
+  file parents to its directory. Writing code means commits and pull requests,
+  which are out of this slice, so no create/update/delete for code. Code search
+  is deferred too: `SearchOptions` has no type selector yet to tell a code
+  search from the issue search the connector already does.
 - **Confluence and Jira are the first two connectors, over shared Atlassian
   plumbing.** Both use the same OAuth 3LO auth, `cloudId` discovery and
   `ex/{product}/{cloudId}` base, so that lives in one `AtlassianSite` helper and

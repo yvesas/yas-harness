@@ -102,6 +102,20 @@ ADR instead.
   `ex/{product}/{cloudId}` base, so that lives in one `AtlassianSite` helper and
   each connector writes only its endpoints and translation. Jira maps issues to
   resources and flattens the Atlassian document format to and from text.
+- **Google Drive is the fourth source, and a file's body is best-effort text.**
+  A file maps to a resource and a folder to one you browse into (`parentId` is
+  the folder). The body is a best-effort text rendering: a Google editor file is
+  exported (a Doc to `text/plain`, a Sheet to `text/csv`), a text file is
+  downloaded via `alt=media`, and a binary (an image, a PDF) has no text body so
+  its content stays null. The resource keeps the file's own Drive mime type even
+  when its content is the export, so a consumer can tell a Doc from a plain file.
+- **Drive writes go metadata-first, then a media upload, avoiding multipart.**
+  `create` posts the file's metadata, then — if a body was given — uploads it to
+  the same id through `uploadType=media` (a raw body, no multipart envelope),
+  the same follow-up shape as the GitHub project readme. `update` patches the
+  title as metadata and the body as a media upload, each only when present.
+  `delete` is Drive's permanent delete (it skips the trash), matching the
+  contract's delete; the destructive-action gate lives a layer above.
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

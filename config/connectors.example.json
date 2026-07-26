@@ -34,5 +34,13 @@
     "clientSecretEnv": "GOOGLE_CLIENT_SECRET",
     "scopes": ["https://www.googleapis.com/auth/drive.file"],
     "authorizationParams": { "access_type": "offline", "prompt": "consent" }
+  },
+
+  "slack": {
+    "authorizationEndpoint": "https://slack.com/oauth/v2/authorize",
+    "tokenEndpoint": "https://slack.com/api/oauth.v2.access",
+    "clientId": "your-slack-client-id",
+    "clientSecretEnv": "SLACK_CLIENT_SECRET",
+    "scopes": ["channels:read", "channels:history", "chat:write", "search:read"]
   }
 }

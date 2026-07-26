@@ -116,6 +116,17 @@ ADR instead.
   title as metadata and the body as a media upload, each only when present.
   `delete` is Drive's permanent delete (it skips the trash), matching the
   contract's delete; the destructive-action gate lives a layer above.
+- **Slack is the fifth source, multi-type like GitHub: channels and messages.**
+  One connection reaches both, routed by an id discriminator — `channel:C123`
+  and `message:C123:<ts>` (the Slack timestamp). A channel is a container you
+  browse into, so a message's `parentId` is its channel's resource id and
+  listing a channel's history takes that (or the bare channel id) as the parent.
+  Channels are read-only (list, read); messages are full — history, read-one
+  (there is no "get message", so history is asked for the single `ts` and the
+  `ts` is verified), search via `search.messages`, and post/edit/delete. A write
+  against a channel id is refused with a clear error. Slack returns HTTP 200 with
+  `{ ok: false, error }`, so `channel_not_found`/`message_not_found` map to
+  not-found and any other error to a connector error.
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

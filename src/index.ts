@@ -247,6 +247,8 @@ export { GoogleDriveConnector } from './connections/connectors/google-drive-conn
 export type { GoogleDriveConnectorOptions } from './connections/connectors/google-drive-connector.js';
 export { SlackConnector } from './connections/connectors/slack-connector.js';
 export type { SlackConnectorOptions } from './connections/connectors/slack-connector.js';
+export { NotionConnector } from './connections/connectors/notion-connector.js';
+export type { NotionConnectorOptions } from './connections/connectors/notion-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

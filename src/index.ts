@@ -251,6 +251,8 @@ export { NotionConnector } from './connections/connectors/notion-connector.js';
 export type { NotionConnectorOptions } from './connections/connectors/notion-connector.js';
 export { GoogleCalendarConnector } from './connections/connectors/google-calendar-connector.js';
 export type { GoogleCalendarConnectorOptions } from './connections/connectors/google-calendar-connector.js';
+export { CalcomConnector } from './connections/connectors/calcom-connector.js';
+export type { CalcomConnectorOptions } from './connections/connectors/calcom-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

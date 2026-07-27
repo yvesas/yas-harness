@@ -127,6 +127,19 @@ ADR instead.
   against a channel id is refused with a clear error. Slack returns HTTP 200 with
   `{ ok: false, error }`, so `channel_not_found`/`message_not_found` map to
   not-found and any other error to a connector error.
+- **Notion is the sixth source, multi-type (pages and databases) with a text
+  body — the same trade Jira makes.** Ids are `page:<uuid>` and
+  `database:<uuid>`. Notion is block-based, so a page's `content` is a text view:
+  read flattens the top-level blocks (headings, lists, quotes rendered with light
+  Markdown), and write turns text back into paragraph blocks — rich blocks
+  flatten on read and are not preserved on write, and setting content replaces
+  the page's blocks (deep nesting is not recursed). A page has no top-level
+  title; it lives in the title-typed property, so the title is read from
+  whichever property is of type `title`, and creating a page in a database
+  resolves that database's title-property name rather than assuming "Name". A
+  database is a container: listing it queries its pages, and listing with no
+  parent falls back to search (which returns both kinds). Delete archives, since
+  Notion has no hard delete over the API.
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

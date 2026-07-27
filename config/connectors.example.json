@@ -42,5 +42,14 @@
     "clientId": "your-slack-client-id",
     "clientSecretEnv": "SLACK_CLIENT_SECRET",
     "scopes": ["channels:read", "channels:history", "chat:write", "search:read"]
+  },
+
+  "notion": {
+    "authorizationEndpoint": "https://api.notion.com/v1/oauth/authorize",
+    "tokenEndpoint": "https://api.notion.com/v1/oauth/token",
+    "clientId": "your-notion-client-id",
+    "clientSecretEnv": "NOTION_CLIENT_SECRET",
+    "scopes": [],
+    "authorizationParams": { "owner": "user" }
   }
 }

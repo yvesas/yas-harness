@@ -126,6 +126,12 @@ in-memory double could agree with a wrong constraint.
   [ADR 0005](./adr/0005-connection-layer-and-credential-vault.md),
   [ADR 0006](./adr/0006-connector-contract.md) and
   [ADR 0007](./adr/0007-oauth-and-transparent-refresh.md).
+- Connected data is cached as `Resource` snapshots, so reads are mostly local
+  and the agent keeps working when a source is down (a stale snapshot beats an
+  error). Keeping it warm is a mechanic, not a background job: the harness
+  exposes `refresh` (poll on the product's schedule) and `invalidate` (call from
+  the product's webhook), running no scheduler of its own — the same boundary as
+  OAuth. See [ADR 0008](./adr/0008-resource-cache.md).
 - We call model providers directly. A routing service would be a third party in
   the data path — every prompt and answer flowing through infrastructure we do
   not control — which is what the LGPD posture rules out. See

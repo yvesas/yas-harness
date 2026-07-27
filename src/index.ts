@@ -245,6 +245,8 @@ export { GitHubConnector } from './connections/connectors/github-connector.js';
 export type { GitHubConnectorOptions } from './connections/connectors/github-connector.js';
 export { GoogleDriveConnector } from './connections/connectors/google-drive-connector.js';
 export type { GoogleDriveConnectorOptions } from './connections/connectors/google-drive-connector.js';
+export { SlackConnector } from './connections/connectors/slack-connector.js';
+export type { SlackConnectorOptions } from './connections/connectors/slack-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

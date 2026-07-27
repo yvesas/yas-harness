@@ -140,6 +140,16 @@ ADR instead.
   database is a container: listing it queries its pages, and listing with no
   parent falls back to search (which returns both kinds). Delete archives, since
   Notion has no hard delete over the API.
+- **Google Calendar is the seventh source, multi-type: calendars and events.**
+  Ids are `calendar:<id>` (the id may be `primary` or an address) and
+  `event:<calendarId>:<eventId>` — an event lives in a calendar, so its
+  `parentId` is the calendar's resource id and listing a calendar's events takes
+  that (or the bare id) as the parent. Calendars are read-only (list, read);
+  events are full CRUD. An event's times are its own fields, so `start`/`end`
+  and `location` ride in `metadata` (and `content` is the description); a value
+  with a `T` is a timed `dateTime`, otherwise an all-day `date`. Create needs a
+  calendar and both times. Search is per-calendar, defaulting to `primary`, and
+  a write against a calendar id is refused.
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

@@ -51,5 +51,17 @@
     "clientSecretEnv": "NOTION_CLIENT_SECRET",
     "scopes": [],
     "authorizationParams": { "owner": "user" }
+  },
+
+  "google-calendar": {
+    "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+    "tokenEndpoint": "https://oauth2.googleapis.com/token",
+    "clientId": "your-google-client-id",
+    "clientSecretEnv": "GOOGLE_CLIENT_SECRET",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/calendar.readonly"
+    ],
+    "authorizationParams": { "access_type": "offline", "prompt": "consent" }
   }
 }

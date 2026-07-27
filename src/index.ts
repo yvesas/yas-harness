@@ -255,6 +255,8 @@ export { CalcomConnector } from './connections/connectors/calcom-connector.js';
 export type { CalcomConnectorOptions } from './connections/connectors/calcom-connector.js';
 export { CalendlyConnector } from './connections/connectors/calendly-connector.js';
 export type { CalendlyConnectorOptions } from './connections/connectors/calendly-connector.js';
+export { TeamsConnector } from './connections/connectors/teams-connector.js';
+export type { TeamsConnectorOptions } from './connections/connectors/teams-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

@@ -71,5 +71,19 @@
     "clientId": "your-calendly-client-id",
     "clientSecretEnv": "CALENDLY_CLIENT_SECRET",
     "scopes": []
+  },
+
+  "teams": {
+    "authorizationEndpoint": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    "tokenEndpoint": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    "clientId": "your-azure-app-client-id",
+    "clientSecretEnv": "MICROSOFT_CLIENT_SECRET",
+    "scopes": [
+      "https://graph.microsoft.com/Team.ReadBasic.All",
+      "https://graph.microsoft.com/Channel.ReadBasic.All",
+      "https://graph.microsoft.com/ChannelMessage.Read.All",
+      "https://graph.microsoft.com/ChannelMessage.Send",
+      "offline_access"
+    ]
   }
 }

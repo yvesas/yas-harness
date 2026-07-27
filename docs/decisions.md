@@ -63,8 +63,11 @@ ADR instead.
   an email, or anything in code / a fenced block — the pipeline discards that
   output and keeps the last safe request. The floor is "no change", never "a
   wrong value" — the domain-agnostic guarantee the OmniRoute study lacked. The
-  first engine is `whitespace` (lossless: trailing-space and blank-line trim
-  only). It is **not wired into the gateway** yet — compression enters the data
+  engines are lossless: `whitespace` (trailing-space and blank-line trim only)
+  and `json-table` (a homogeneous JSON array of objects → a compact
+  `{columns, rows}` table — drops repeated keys, keeps every value; if
+  re-serialising would reformat a number, the gate discards it). It is **not
+  wired into the gateway** yet — compression enters the data
   path only once its real token saving is measured (E5.4) and an eval confirms
   answers don't degrade (E5.5). The strategy ADR is E5.8. Gate patterns are
   linear (no ReDoS).

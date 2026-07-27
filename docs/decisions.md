@@ -171,6 +171,19 @@ ADR instead.
   resolves the account's URI from `/users/me` rather than making the caller pass
   it, and it unwraps Calendly's `{ collection, pagination }` and `{ resource }`
   envelopes.
+- **Microsoft Teams is the tenth source, three levels deep: teams, channels,
+  messages.** Over Microsoft Graph, one connection reaches the whole hierarchy,
+  routed by an id discriminator — `team:<id>`, `channel:<teamId>:<channelId>`,
+  `message:<teamId>:<channelId>:<messageId>` — because a channel and a message
+  need their full path. Graph channel ids themselves contain colons and an `@`
+  (`19:abc@thread.tacv2`), so the id stays unambiguous by taking the team as the
+  first segment and the message as the last (both colon-free) with the channel
+  id in between. `list` browses down the hierarchy (no parent → teams; a team →
+  its channels; a channel → its messages). Teams and channels are read-only;
+  messages can be posted, but Graph v1.0 has no edit or delete for a channel
+  message, so the connector declares only `list`/`read`/`create` — the honest
+  surface. The real friction is not code but Azure AD app registration and
+  admin-consented permissions (`ChannelMessage.Read.All`, `ChannelMessage.Send`).
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

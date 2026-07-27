@@ -16,6 +16,7 @@
 import { CompressionPipeline } from './compression-pipeline.js';
 import type { CompressionEngine, ContextCompressor } from './context-compressor.js';
 import { RegexSensitivityGuard, type SensitivityGuard } from './sensitivity-gate.js';
+import { JsonTableEngine } from './engines/json-table-engine.js';
 import { WhitespaceEngine } from './engines/whitespace-engine.js';
 
 export type CompressionProfile = 'none' | 'light' | 'medium' | 'aggressive';
@@ -24,8 +25,8 @@ export type CompressionProfile = 'none' | 'light' | 'medium' | 'aggressive';
 const PROFILES: Record<CompressionProfile, () => CompressionEngine[]> = {
   none: () => [],
   light: () => [new WhitespaceEngine()],
-  medium: () => [new WhitespaceEngine()],
-  aggressive: () => [new WhitespaceEngine()],
+  medium: () => [new WhitespaceEngine(), new JsonTableEngine()],
+  aggressive: () => [new WhitespaceEngine(), new JsonTableEngine()],
 };
 
 /** Build a compressor for a profile. Unknown profiles fall back to `none`. */

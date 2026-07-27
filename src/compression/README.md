@@ -24,8 +24,10 @@ subscription product sends fewer tokens without sending a worse prompt. It is a
 - `compression-pipeline.ts` — runs a profile's engines in priority order, each
   under the gate, and reports per-engine character savings (a token proxy until
   E5.4 measures tokens).
-- `engines/` — concrete engines. Today: `whitespace` (lossless: trailing-space
-  and blank-line trim only — never touches whitespace inside a line).
+- `engines/` — concrete engines. Today, both lossless: `whitespace`
+  (trailing-space and blank-line trim only — never touches whitespace inside a
+  line) and `json-table` (a homogeneous JSON array of objects → a compact
+  `{columns, rows}` table, dropping repeated keys while keeping every value).
 - `profiles.ts` — named engine subsets (`none`/`light`/`medium`/`aggressive`);
   `none` is the off-by-default identity.
 

@@ -150,6 +150,17 @@ ADR instead.
   with a `T` is a timed `dateTime`, otherwise an all-day `date`. Create needs a
   calendar and both times. Search is per-calendar, defaulting to `primary`, and
   a write against a calendar id is refused.
+- **Cal.com is the eighth source: event types and bookings, no search.** Ids are
+  `event-type:<id>` (a bookable template, read-only) and `booking:<uid>` (a
+  scheduled meeting, full CRUD); a booking's `parentId` is its event type. The
+  writes map to Cal.com's verbs, not generic ones: create is _book a slot_
+  (needs the event type, a start and an attendee), update is _reschedule_ (a new
+  `metadata.start`), delete is _cancel_. Cal.com has no free-text booking search,
+  so the connector does not declare `search` — it exposes only what the source
+  supports. Responses are unwrapped from the `{ status, data }` envelope, and
+  each endpoint group is pinned to its dated `cal-api-version`. The credential is
+  a bearer token — an API key or OAuth access token — so no OAuth provider entry
+  is needed for the key case.
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

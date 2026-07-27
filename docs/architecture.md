@@ -1,8 +1,9 @@
 # Architecture
 
 The harness is a reusable agent chassis. It receives messages, routes them,
-runs tools, picks a model, records cost, and (soon) asks for approval and
-connects external services. Products fork it and add business modules on top.
+runs tools, picks a model, records cost, pauses for human approval on sensitive
+actions, and connects external services — caching them and exposing them over
+MCP. Products fork it and add business modules on top.
 
 ## The golden rule
 
@@ -33,6 +34,9 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `ApprovalStore` | `src/approval/approval-store.ts` | `PostgresApprovalStore`, `InMemoryApprovalStore` |
 | `ConnectionStore` | `src/connections/connection-store.ts` | `PostgresConnectionStore`, `InMemoryConnectionStore` |
 | `CredentialStore` / `TenantKeyStore` | `src/connections/credential-vault.ts` | Postgres and in-memory |
+| `CredentialResolver` | `src/connections/credential-resolver.ts` | `VaultCredentialResolver`, `OAuthTokenRefresher` |
+| `Connector` | `src/connections/connector.ts` | Confluence, Jira, GitHub, Drive, Slack, Notion, Calendar, Cal.com, Calendly, Teams, `MemoryConnector` |
+| `ResourceCacheStore` | `src/connections/resource-cache-store.ts` | `PostgresResourceCacheStore`, `InMemoryResourceCacheStore` |
 | `UsageRecorder` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden

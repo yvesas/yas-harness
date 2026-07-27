@@ -184,6 +184,14 @@ ADR instead.
   message, so the connector declares only `list`/`read`/`create` — the honest
   surface. The real friction is not code but Azure AD app registration and
   admin-consented permissions (`ChannelMessage.Read.All`, `ChannelMessage.Send`).
+- **Connectors are exposed over MCP as six generic tools, read-only by default.**
+  Because every connector speaks one `Resource` shape, `list`/`read`/`search`/
+  `create`/`update`/`delete` (each taking a `connectionId`) cover them all — no
+  per-connector tools. The server is mechanics (`handle` maps one JSON-RPC
+  message to one response; the product runs the transport and resolves the
+  tenant), hand-written with no dependency, tenant-scoped, and writes are off
+  unless a product opts in via `allow`. See
+  [ADR 0009](./adr/0009-mcp-connectors.md).
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

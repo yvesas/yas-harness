@@ -35,6 +35,7 @@ import {
 import { Agent } from './core/agent.js';
 import { loadPersona } from './core/persona.js';
 import { ToolRegistry } from './core/tool.js';
+import { McpServer } from './mcp/mcp-server.js';
 import { PostgresSessionStore } from './memory/postgres-session-store.js';
 import type { SessionStore } from './memory/session-store.js';
 import { AnthropicProvider } from './models/anthropic-provider.js';
@@ -80,6 +81,12 @@ export interface Harness {
    * Present only when the connection manager is.
    */
   readonly cachedConnections: CachedConnections | null;
+  /**
+   * A read-only MCP server exposing the connectors as tools, over the cache.
+   * Present only when the connection manager is. Products that want to expose
+   * writes construct their own `McpServer` with `allow`.
+   */
+  readonly mcpServer: McpServer | null;
   close(): Promise<void>;
 }
 
@@ -155,6 +162,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // wraps the manager once it exists, so products get read-through for free.
   let connectionManager: ConnectionManager | null = null;
   let cachedConnections: CachedConnections | null = null;
+  let mcpServer: McpServer | null = null;
   if (vault) {
     const providers = await loadConnectorsConfig(join(configDir, 'connectors.json'));
     const resolver: CredentialResolver =
@@ -163,6 +171,8 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
         : new VaultCredentialResolver(vault);
     connectionManager = new ConnectionManager(connectors, connections, resolver);
     cachedConnections = new CachedConnections(connectionManager, resourceCache);
+    // Read-only by default; the cache serves reads, sparing the sources.
+    mcpServer = new McpServer(cachedConnections, { name: HARNESS_NAME });
   }
 
   return {
@@ -180,6 +190,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     connectionManager,
     resourceCache,
     cachedConnections,
+    mcpServer,
     close: () => pool.end(),
   };
 }
@@ -257,6 +268,19 @@ export { CalendlyConnector } from './connections/connectors/calendly-connector.j
 export type { CalendlyConnectorOptions } from './connections/connectors/calendly-connector.js';
 export { TeamsConnector } from './connections/connectors/teams-connector.js';
 export type { TeamsConnectorOptions } from './connections/connectors/teams-connector.js';
+export { McpServer } from './mcp/mcp-server.js';
+export type { McpContext, McpServerOptions } from './mcp/mcp-server.js';
+export {
+  MCP_PROTOCOL_VERSION,
+  JSONRPC_VERSION,
+  ErrorCode as McpErrorCode,
+} from './mcp/protocol.js';
+export type {
+  JsonRpcRequest,
+  JsonRpcResponse,
+  McpToolDefinition,
+  McpToolResult,
+} from './mcp/protocol.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

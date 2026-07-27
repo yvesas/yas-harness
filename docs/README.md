@@ -30,6 +30,7 @@ Two kinds, kept apart on purpose:
 | [0006](./adr/0006-connector-contract.md) | One resource-shaped contract for every connector |
 | [0007](./adr/0007-oauth-and-transparent-refresh.md) | OAuth as mechanics, with transparent token refresh |
 | [0008](./adr/0008-resource-cache.md) | A read-through cache of connected resources, refreshed by polling or webhook |
+| [0009](./adr/0009-mcp-connectors.md) | Expose connectors over MCP as mechanics, read-only by default |
 
 ## Writing a new ADR
 

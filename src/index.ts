@@ -268,6 +268,21 @@ export { CalendlyConnector } from './connections/connectors/calendly-connector.j
 export type { CalendlyConnectorOptions } from './connections/connectors/calendly-connector.js';
 export { TeamsConnector } from './connections/connectors/teams-connector.js';
 export type { TeamsConnectorOptions } from './connections/connectors/teams-connector.js';
+export { CompressionPipeline } from './compression/compression-pipeline.js';
+export { CompressionError } from './compression/context-compressor.js';
+export type {
+  ContextCompressor,
+  CompressionEngine,
+  CompressionResult,
+  CompressionReport,
+  EngineReport,
+} from './compression/context-compressor.js';
+export { RegexSensitivityGuard } from './compression/sensitivity-gate.js';
+export type { SensitivityGuard } from './compression/sensitivity-gate.js';
+export { WhitespaceEngine } from './compression/engines/whitespace-engine.js';
+export { compressorFor } from './compression/profiles.js';
+export type { CompressionProfile } from './compression/profiles.js';
+export { renderRequestText, requestSize } from './compression/request-text.js';
 export { McpServer } from './mcp/mcp-server.js';
 export type { McpContext, McpServerOptions } from './mcp/mcp-server.js';
 export {

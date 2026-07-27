@@ -74,6 +74,7 @@ without a network or an API bill.
 | `src/connections/` | External connectors, connections and the credential vault |
 | `src/connections/connectors/` | Concrete connectors (Confluence, Jira, GitHub, Google Drive, Slack, Notion, Google Calendar, Cal.com, Calendly, Microsoft Teams) and shared Atlassian plumbing |
 | `src/mcp/` | MCP server exposing the connectors as tools (mechanics, no transport) |
+| `src/compression/` | Context compression: a gated engine pipeline (mechanism; not on the gateway path yet) |
 | `src/approval/` | Human approval queue |
 
 ## The path of a message

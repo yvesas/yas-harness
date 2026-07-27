@@ -63,5 +63,13 @@
       "https://www.googleapis.com/auth/calendar.readonly"
     ],
     "authorizationParams": { "access_type": "offline", "prompt": "consent" }
+  },
+
+  "calendly": {
+    "authorizationEndpoint": "https://auth.calendly.com/oauth/authorize",
+    "tokenEndpoint": "https://auth.calendly.com/oauth/token",
+    "clientId": "your-calendly-client-id",
+    "clientSecretEnv": "CALENDLY_CLIENT_SECRET",
+    "scopes": []
   }
 }

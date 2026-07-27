@@ -253,6 +253,8 @@ export { GoogleCalendarConnector } from './connections/connectors/google-calenda
 export type { GoogleCalendarConnectorOptions } from './connections/connectors/google-calendar-connector.js';
 export { CalcomConnector } from './connections/connectors/calcom-connector.js';
 export type { CalcomConnectorOptions } from './connections/connectors/calcom-connector.js';
+export { CalendlyConnector } from './connections/connectors/calendly-connector.js';
+export type { CalendlyConnectorOptions } from './connections/connectors/calendly-connector.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
 export {

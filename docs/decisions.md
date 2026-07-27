@@ -161,6 +161,16 @@ ADR instead.
   each endpoint group is pinned to its dated `cal-api-version`. The credential is
   a bearer token — an API key or OAuth access token — so no OAuth provider entry
   is needed for the key case.
+- **Calendly is the ninth source: read and cancel, no create or reschedule.**
+  Ids are `event-type:<uuid>` (a bookable template) and `event:<uuid>` (a
+  scheduled event), the uuid taken from Calendly's resource URI; a scheduled
+  event's `parentId` is its event type. Calendly's API does not create scheduled
+  events (an invitee books through a link) or reschedule them, so the connector
+  declares only `list`, `read` and `delete` (which cancels a scheduled event) —
+  the honest surface. Both list endpoints are scoped to a user, so the connector
+  resolves the account's URI from `/users/me` rather than making the caller pass
+  it, and it unwraps Calendly's `{ collection, pagination }` and `{ resource }`
+  envelopes.
 - **The `cloudId` is discovered at runtime, not stored in the credential.**
   The refresher rewrites a plain `OAuthToken` on refresh, which would drop any
   extra field, so the site id is fetched from `accessible-resources` and cached

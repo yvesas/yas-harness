@@ -55,6 +55,19 @@ ADR instead.
 - **Extended thinking is not enabled.** It requires echoing provider-specific
   blocks back unchanged, which the gateway port cannot express yet; the adapter
   drops those blocks rather than half-supporting the feature.
+- **Context compression is a gated pipeline, and safe by construction (E5.1).**
+  A `ContextCompressor` port compresses a `ModelRequest` through a priority-
+  ordered set of engines (`compress` + `configSchema`, config validated at
+  construction), each checked by a **sensitivity gate**: if an engine's output
+  would drop or alter a protected value — money, a number, a date, an id, a URL,
+  an email, or anything in code / a fenced block — the pipeline discards that
+  output and keeps the last safe request. The floor is "no change", never "a
+  wrong value" — the domain-agnostic guarantee the OmniRoute study lacked. The
+  first engine is `whitespace` (lossless: trailing-space and blank-line trim
+  only). It is **not wired into the gateway** yet — compression enters the data
+  path only once its real token saving is measured (E5.4) and an eval confirms
+  answers don't degrade (E5.5). The strategy ADR is E5.8. Gate patterns are
+  linear (no ReDoS).
 
 ## Connections and credentials
 

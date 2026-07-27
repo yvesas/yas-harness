@@ -1,0 +1,32 @@
+# `src/compression/` — context compression (E5)
+
+Compresses a `ModelRequest`'s context before it reaches a model, so a
+subscription product sends fewer tokens without sending a worse prompt. It is a
+**pipeline of composable engines** behind a **sensitivity gate**.
+
+## Boundary
+
+- **Mechanism, not policy on the hot path.** This is a `ContextCompressor` port
+  (`compress(request) → {request, report}`). It is **not** wired into the model
+  gateway yet — compression only goes into the data path once its real token
+  saving is measured (E5.4) and an eval confirms answers don't degrade (E5.5).
+- **Safe by construction.** Every engine's output is checked by the
+  `SensitivityGuard`: an exact value — a price, a date, an id, a URL, an email,
+  anything in code or a fenced block — that would change causes the engine's
+  output to be **discarded**. The floor is "no change", never "a wrong value".
+- **Provider-neutral, no product domain.** Works on the ADR-002 `ModelRequest`
+  shape; nothing here names a provider or a product concept.
+
+## Pieces
+
+- `context-compressor.ts` — the port and the `CompressionEngine` contract.
+- `sensitivity-gate.ts` — what must stay byte-perfect (linear patterns, no ReDoS).
+- `compression-pipeline.ts` — runs a profile's engines in priority order, each
+  under the gate, and reports per-engine character savings (a token proxy until
+  E5.4 measures tokens).
+- `engines/` — concrete engines. Today: `whitespace` (lossless: trailing-space
+  and blank-line trim only — never touches whitespace inside a line).
+- `profiles.ts` — named engine subsets (`none`/`light`/`medium`/`aggressive`);
+  `none` is the off-by-default identity.
+
+See `docs/decisions.md`; the strategy ADR is E5.8, a later slice.

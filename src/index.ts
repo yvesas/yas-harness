@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import pg from 'pg';
 
 import { PostgresApprovalStore } from './approval/postgres-approval-store.js';
+import { RedactingApprovalStore } from './approval/redacting-approval-store.js';
 import type { ApprovalStore } from './approval/approval-store.js';
 import { CachedConnections } from './connections/cached-connections.js';
 import { ConnectionManager } from './connections/connection-manager.js';
@@ -37,6 +38,7 @@ import { loadPersona } from './core/persona.js';
 import { ToolRegistry } from './core/tool.js';
 import { McpServer } from './mcp/mcp-server.js';
 import { PostgresSessionStore } from './memory/postgres-session-store.js';
+import { RedactingSessionStore } from './memory/redacting-session-store.js';
 import type { SessionStore } from './memory/session-store.js';
 import { AnthropicProvider } from './models/anthropic-provider.js';
 import { GroqProvider } from './models/groq-provider.js';
@@ -46,9 +48,12 @@ import { RoutedGateway } from './models/routed-gateway.js';
 import { loadModelConfig } from './models/routing.js';
 import { ModuleRegistry } from './modules/module.js';
 import { PostgresPoolStore } from './pools/postgres-pool-store.js';
+import { RedactingPoolStore } from './pools/redacting-pool-store.js';
 import type { PoolStore } from './pools/pool-store.js';
+import { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
 import { Router } from './router/router.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
+import { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 
 export const HARNESS_NAME = 'yas-harness';
 
@@ -122,7 +127,10 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const modelConfig = await loadModelConfig(join(configDir, 'models.json'));
 
   const pool = new pg.Pool({ connectionString: databaseUrl });
-  const sessions = new PostgresSessionStore(pool);
+  // Redaction is always on: every free-text path to the database or a log is
+  // wrapped so a secret never lands there in the clear.
+  const redactor = new RegexSecretRedactor();
+  const sessions = new RedactingSessionStore(new PostgresSessionStore(pool), redactor);
 
   // Only providers the configuration actually routes to are constructed, so a
   // deployment that uses one provider does not need the other's credentials.
@@ -134,12 +142,13 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const gateway = new RoutedGateway({
     config: modelConfig,
     providers,
-    recorder: new PostgresUsageRecorder(pool),
+    recorder: new RedactingUsageRecorder(new PostgresUsageRecorder(pool), redactor),
+    redactor,
   });
   const tools = options.tools ?? new ToolRegistry();
   const modules = options.modules ?? new ModuleRegistry();
-  const pools = new PostgresPoolStore(pool);
-  const approvals = new PostgresApprovalStore(pool);
+  const pools = new RedactingPoolStore(new PostgresPoolStore(pool), redactor);
+  const approvals = new RedactingApprovalStore(new PostgresApprovalStore(pool), redactor);
   const connections = new PostgresConnectionStore(pool);
 
   // The vault only exists if a master key is configured. Building it without
@@ -353,6 +362,13 @@ export type { ModelConfig, ModelEntry, ModelTier } from './models/routing.js';
 export { InMemoryUsageRecorder, computeCostUsd } from './telemetry/model-usage.js';
 export type { ModelUsageRecord, UsageRecorder } from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
+export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
+export { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
+export { redactDeep } from './redaction/secret-redactor.js';
+export type { SecretRedactor } from './redaction/secret-redactor.js';
+export { RedactingSessionStore } from './memory/redacting-session-store.js';
+export { RedactingPoolStore } from './pools/redacting-pool-store.js';
+export { RedactingApprovalStore } from './approval/redacting-approval-store.js';
 export { ModuleError, ModuleRegistry } from './modules/module.js';
 export type { ModuleDefinition } from './modules/module.js';
 export { Router, RouterError } from './router/router.js';

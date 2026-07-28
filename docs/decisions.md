@@ -83,6 +83,20 @@ ADR instead.
   measurement, not the fixed compression ratio OmniRoute assumed. Persisting the
   saving alongside `model_usage` waits for the gateway wiring (E5.5), where the
   provider's own usage numbers land next to it.
+- **Lossy engines drop content, but the gate still catches corruption (E5.6).**
+  The biggest real saving is in tool-result output (logs, dumps, retries), which
+  needs *dropping* — truncation and dedup — not just rewriting. So an engine now
+  declares itself `lossy`, and the gate applies in the matching direction: a
+  lossless engine must keep every protected value (nothing dropped); a lossy one
+  may drop values but must not **introduce** one that was not in the input — a
+  mangled `$1,234.56 → $1` shows up as a token absent from the input and is
+  discarded. The floor stays "safe drop", never "wrong value". The first lossy
+  engine, `tool-result`, strips ANSI, collapses repeated consecutive lines, and
+  truncates a long result to head+tail while keeping every error-looking line;
+  an `isError` result is never truncated. It is in the `aggressive` profile only
+  (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
+  it is security, must always run, and must never be a discardable engine — it
+  belongs on the persistence/log path (a separate slice), not the cost pipeline.
 
 ## Connections and credentials
 

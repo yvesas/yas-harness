@@ -19,8 +19,19 @@
  */
 
 export interface SensitivityGuard {
-  /** True if every protected value in `before` still appears (as often) in `after`. */
+  /**
+   * True if every protected value in `before` still appears (as often) in
+   * `after` — the gate for a *lossless* engine, which may not drop a value.
+   */
   preservesSensitive(before: string, after: string): boolean;
+  /**
+   * True if `after` introduces no protected value that was not already in
+   * `before` — the gate for a *lossy* engine, which may drop content (truncate,
+   * deduplicate) but must never invent or mangle a value. A corrupted value
+   * shows up as a token absent from `before`, so this catches it while still
+   * allowing an honest drop.
+   */
+  introducesNoSensitive(before: string, after: string): boolean;
   /** The protected values found in a text — exposed for inspection and tests. */
   protectedTokens(text: string): string[];
 }
@@ -50,6 +61,17 @@ export class RegexSensitivityGuard implements SensitivityGuard {
     const have = counts(this.protectedTokens(after));
     for (const [token, need] of wanted) {
       if ((have.get(token) ?? 0) < need) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  introducesNoSensitive(before: string, after: string): boolean {
+    const had = counts(this.protectedTokens(before));
+    const got = counts(this.protectedTokens(after));
+    for (const [token, appears] of got) {
+      if ((had.get(token) ?? 0) < appears) {
         return false;
       }
     }

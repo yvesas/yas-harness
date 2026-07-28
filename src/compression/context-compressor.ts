@@ -71,6 +71,14 @@ export interface CompressionEngine {
   readonly name: string;
   /** Lower runs first. */
   readonly priority: number;
+  /**
+   * Whether this engine may drop content (truncate, deduplicate) rather than
+   * only rewrite it. Defaults to lossless. It picks which way the sensitivity
+   * gate is applied: a lossless engine must keep every protected value; a lossy
+   * one may drop them but must never invent or mangle one. Either way a
+   * protected value can never come out wrong — only, for a lossy engine, absent.
+   */
+  readonly lossy?: boolean;
   /** The Zod schema for this engine's configuration, for validation and docs. */
   configSchema(): z.ZodType;
   compress(request: ModelRequest): ModelRequest;

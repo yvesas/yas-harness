@@ -155,6 +155,70 @@ describe('CompressionPipeline token measurement (E5.4)', () => {
   });
 });
 
+/** A lossy engine: it drops every line of the text after the first. */
+class DroppingEngine implements CompressionEngine {
+  readonly name = 'drop';
+  readonly priority = 5;
+  readonly lossy = true;
+  configSchema(): z.ZodType {
+    return z.object({});
+  }
+  compress(request: ModelRequest): ModelRequest {
+    return {
+      ...request,
+      messages: request.messages.map((message) => ({
+        ...message,
+        content: message.content.map((part) =>
+          part.type === 'text' ? { ...part, text: part.text.split('\n')[0]! } : part,
+        ),
+      })),
+    };
+  }
+}
+
+/** A lossy engine that also mangles a money value while dropping — must be caught. */
+class LossyCorruptingEngine implements CompressionEngine {
+  readonly name = 'lossy-corrupt';
+  readonly priority = 5;
+  readonly lossy = true;
+  configSchema(): z.ZodType {
+    return z.object({});
+  }
+  compress(request: ModelRequest): ModelRequest {
+    return {
+      ...request,
+      messages: request.messages.map((message) => ({
+        ...message,
+        content: message.content.map((part) =>
+          part.type === 'text' ? { ...part, text: part.text.replace('$1,234.56', '$1') } : part,
+        ),
+      })),
+    };
+  }
+}
+
+describe('CompressionPipeline lossy gate (E5.6)', () => {
+  it('lets a lossy engine drop a protected value', () => {
+    const pipeline = new CompressionPipeline([new DroppingEngine()]);
+
+    const { request, report } = pipeline.compress(textRequest('keep $10.00\ndrop $20.00'));
+
+    expect(firstText(request)).toBe('keep $10.00'); // the tail (and its $20.00) is gone
+    expect(report.engines[0]).toMatchObject({ engine: 'drop', applied: true });
+  });
+
+  it('still discards a lossy engine that mangles a value', () => {
+    const original = 'the total is $1,234.56 exactly, and more text to shrink';
+    const pipeline = new CompressionPipeline([new LossyCorruptingEngine()]);
+
+    const { request, report } = pipeline.compress(textRequest(original));
+
+    expect(firstText(request)).toBe(original); // untouched — the lossy gate refused it
+    expect(report.engines[0]).toMatchObject({ engine: 'lossy-corrupt', applied: false });
+    expect(report.engines[0]?.reason).toMatch(/sensitivity gate/);
+  });
+});
+
 describe('compressorFor (profiles)', () => {
   it('the none profile changes nothing', () => {
     const { request, report } = compressorFor('none').compress(textRequest('a   \n\n\n\nb'));
@@ -165,5 +229,29 @@ describe('compressorFor (profiles)', () => {
   it('the light profile applies whitespace compression', () => {
     const { request } = compressorFor('light').compress(textRequest('a   \n\n\n\nb'));
     expect(firstText(request)).toBe('a\n\nb');
+  });
+
+  it('only the aggressive profile truncates a long tool result', () => {
+    const many = Array.from({ length: 60 }, (_, i) => `line ${i}`).join('\n');
+    const request: ModelRequest = {
+      task: 'reasoning',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'tool_result', toolCallId: 't', content: many, isError: false }],
+        },
+      ],
+    };
+    const resultText = (r: ModelRequest): string => {
+      const part = r.messages[0]!.content[0]!;
+      return part.type === 'tool_result' ? part.content : '';
+    };
+
+    expect(resultText(compressorFor('medium').compress(request).request)).toBe(many);
+
+    const aggressive = resultText(compressorFor('aggressive').compress(request).request);
+    expect(aggressive).not.toBe(many);
+    expect(aggressive).toContain('[… elided …]');
+    expect(aggressive.length).toBeLessThan(many.length);
   });
 });

@@ -4,19 +4,20 @@
 /**
  * Compression profiles: a named subset of engines.
  *
- * A profile is how a product dials the aggressiveness — from touching only the
- * safest, lowest-risk boilerplate to (later) lossy summarisation. Today there
- * is one engine, so the profiles differ only in whether they include it; as
- * lossless and then lossy engines are added, each profile grows into its own
- * subset. `none` is the identity: it exists so a product can wire the pipeline
- * and keep it off, which is the default posture until compression is measured
- * and eval-gated.
+ * A profile is how a product dials the aggressiveness. The line that matters is
+ * lossless vs lossy: `light` and `medium` only rewrite (whitespace, then the
+ * JSON-table engine), so they never drop anything; `aggressive` adds the
+ * tool-result engine, which truncates and deduplicates — real dropping, under
+ * the pipeline's lossy gate. `none` is the identity: it exists so a product can
+ * wire the pipeline and keep it off, the default posture until compression is
+ * eval-gated.
  */
 
 import { CompressionPipeline } from './compression-pipeline.js';
 import type { CompressionEngine, ContextCompressor } from './context-compressor.js';
 import { RegexSensitivityGuard, type SensitivityGuard } from './sensitivity-gate.js';
 import { JsonTableEngine } from './engines/json-table-engine.js';
+import { ToolResultEngine } from './engines/tool-result-engine.js';
 import { WhitespaceEngine } from './engines/whitespace-engine.js';
 import type { TokenCounter } from '../models/token-counter.js';
 
@@ -27,7 +28,7 @@ const PROFILES: Record<CompressionProfile, () => CompressionEngine[]> = {
   none: () => [],
   light: () => [new WhitespaceEngine()],
   medium: () => [new WhitespaceEngine(), new JsonTableEngine()],
-  aggressive: () => [new WhitespaceEngine(), new JsonTableEngine()],
+  aggressive: () => [new WhitespaceEngine(), new JsonTableEngine(), new ToolResultEngine()],
 };
 
 /**

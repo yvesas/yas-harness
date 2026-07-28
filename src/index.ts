@@ -281,6 +281,7 @@ export { RegexSensitivityGuard } from './compression/sensitivity-gate.js';
 export type { SensitivityGuard } from './compression/sensitivity-gate.js';
 export { WhitespaceEngine } from './compression/engines/whitespace-engine.js';
 export { JsonTableEngine } from './compression/engines/json-table-engine.js';
+export { ToolResultEngine } from './compression/engines/tool-result-engine.js';
 export { compressorFor } from './compression/profiles.js';
 export type { CompressionProfile } from './compression/profiles.js';
 export { renderRequestText, requestSize } from './compression/request-text.js';

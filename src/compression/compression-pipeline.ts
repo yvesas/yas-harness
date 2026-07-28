@@ -71,7 +71,13 @@ export class CompressionPipeline implements ContextCompressor {
         });
         continue;
       }
-      if (!this.#guard.preservesSensitive(currentText, candidateText)) {
+      // A lossless engine must keep every protected value; a lossy one may drop
+      // content but must never invent or mangle one. Either way, the gate never
+      // lets a value come out *wrong*.
+      const safe = engine.lossy
+        ? this.#guard.introducesNoSensitive(currentText, candidateText)
+        : this.#guard.preservesSensitive(currentText, candidateText);
+      if (!safe) {
         reports.push({
           engine: engine.name,
           applied: false,

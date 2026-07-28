@@ -68,3 +68,28 @@ describe('RegexSensitivityGuard — preservesSensitive', () => {
     expect(guard.preservesSensitive('$10.00 then $10.00', 'just $10.00')).toBe(false);
   });
 });
+
+describe('RegexSensitivityGuard — introducesNoSensitive (the lossy gate)', () => {
+  it('accepts dropping a protected value (a lossy engine is allowed to)', () => {
+    // Truncation keeps the head, drops the tail with its $20.00 — a legal drop.
+    expect(guard.introducesNoSensitive('total $10.00 and $20.00', 'total $10.00')).toBe(true);
+  });
+
+  it('accepts dropping a repeated value down to fewer occurrences', () => {
+    expect(guard.introducesNoSensitive('$10.00 then $10.00 then $10.00', '$10.00')).toBe(true);
+  });
+
+  it('accepts an identical text', () => {
+    expect(guard.introducesNoSensitive('due 2026-08-01', 'due 2026-08-01')).toBe(true);
+  });
+
+  it('rejects inventing a protected value not present before', () => {
+    // A truncation that mangled $1,234.56 into $1 introduces $1, which was
+    // never in the input — exactly the corruption the lossy gate must catch.
+    expect(guard.introducesNoSensitive('total $1,234.56', 'total $1')).toBe(false);
+  });
+
+  it('rejects keeping more of a value than the input had', () => {
+    expect(guard.introducesNoSensitive('one $10.00', '$10.00 and $10.00')).toBe(false);
+  });
+});

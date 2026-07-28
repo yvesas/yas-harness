@@ -97,6 +97,26 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **The cacheable prefix is never compressed — not even losslessly (E5.7).**
+  A request may declare a `CachePrefix` (`system`, `tools`, and the first N
+  messages), which does two things: the Anthropic adapter puts a single cache
+  breakpoint at the end of that region, and the compression pipeline splits it
+  off and splices it back byte-for-byte. Downgrading the prefix to lossless
+  engines — the other option considered — does not work: *lossless* means
+  meaning-preserving, while a cache match needs **byte-identical**, so even a
+  whitespace trim loses it. The economics settle the rest. A cached read bills a
+  fraction of the input rate and re-writing the entry bills above it, so
+  shrinking an already-discounted prefix wins a few percent of a small number
+  while a churned prefix costs an order of magnitude more; compression could
+  also push a prefix under the provider's minimum cacheable size, which fails
+  **silently** as "no cache" rather than as an error. Splitting the region out
+  (rather than restoring it after the fact) is also what keeps the report
+  honest: an engine can no longer be credited for shrinking bytes that get put
+  back. Only the declared prefix is marked, never the tail — the tail changes
+  every turn, so marking it would pay the write premium for an entry nothing
+  reads. The declaration is the caller's: only it knows what is stable, and the
+  hint is clamped to the messages actually present. Providers without prompt
+  caching (Groq today) ignore it and lose nothing.
 - **Secret redaction is always-on, on the persistence and log path (E5.6b).**
   A `SecretRedactor` port with a shape-based default (`RegexSecretRedactor`:
   PEM blocks, JWTs, AWS/Google/GitHub/Slack/Stripe/OpenAI-style keys, Bearer

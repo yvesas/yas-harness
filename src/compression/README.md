@@ -17,6 +17,13 @@ subscription product sends fewer tokens without sending a worse prompt. It is a
   engine's output to be **discarded**. A *lossless* engine may not drop a value
   at all; a *lossy* one (truncation, dedup) may drop content but still may not
   invent or mangle one. Either way the floor is never "a wrong value".
+- **Cache-aware.** A request may declare a `cachePrefix` — the leading region
+  the caller knows is stable across turns. The pipeline splits it off and
+  splices it back unchanged, because provider caches match on *exact leading
+  bytes* and "lossless" is not "byte-identical": even a whitespace trim would
+  lose the match. Squeezing an already-discounted prefix cannot pay for the
+  misses it would cause, so the answer is not "compress it more gently" — it is
+  don't touch it (E5.7).
 - **Provider-neutral, no product domain.** Works on the ADR-002 `ModelRequest`
   shape; nothing here names a provider or a product concept.
 
@@ -28,7 +35,10 @@ subscription product sends fewer tokens without sending a worse prompt. It is a
   under the gate, and reports per-engine savings in both characters (the cheap
   signal it decides "did it shrink?" on) and **tokens** (measured through a
   `TokenCounter` — the billed cost). The counter is injectable; the default is
-  `GptTokenizerCounter` (real BPE, `src/models/`).
+  `GptTokenizerCounter` (real BPE, `src/models/`). It also enforces the cache
+  boundary: with a `cachePrefix` declared, only the region after it is measured
+  and compressed, and the report carries the prefix's cost separately so a
+  saving reads as a share of what was actually eligible.
 - `engines/` — concrete engines. Lossless: `whitespace` (trailing-space and
   blank-line trim only — never touches whitespace inside a line) and `json-table`
   (a homogeneous JSON array of objects → a compact `{columns, rows}` table,

@@ -79,6 +79,28 @@ export interface RequestAttribution {
   readonly sessionId?: string;
 }
 
+/**
+ * The leading part of a request a provider may cache and re-serve cheaply.
+ *
+ * Providers price this as a *prefix match*: a request whose leading bytes are
+ * byte-identical to an earlier one is billed a fraction of the input rate for
+ * that region. Only the caller knows how much of its context is stable from one
+ * turn to the next, so it declares that here — the harness never guesses.
+ *
+ * The prefix is `system`, then `tools`, then the first `stableMessages`
+ * messages. Declaring it has two effects: an adapter whose provider supports
+ * caching asks for exactly that region to be cached, and the context compressor
+ * leaves it untouched — a rewritten prefix no longer matches, and one miss
+ * costs far more than compressing it would ever have saved.
+ */
+export interface CachePrefix {
+  /**
+   * How many leading messages are stable across turns. `0` declares only
+   * `system` and `tools`, which is the usual case early in a conversation.
+   */
+  readonly stableMessages: number;
+}
+
 export interface ModelRequest {
   readonly task: TaskKind;
   readonly attribution?: RequestAttribution;
@@ -86,6 +108,7 @@ export interface ModelRequest {
   readonly messages: readonly ModelMessage[];
   readonly tools?: readonly ToolSchema[];
   readonly maxOutputTokens?: number;
+  readonly cachePrefix?: CachePrefix;
 }
 
 export type StopReason =
@@ -155,4 +178,21 @@ export function responseText(response: ModelResponse): string {
 /** The tool calls a response is waiting on. */
 export function toolCalls(response: ModelResponse): ToolCallPart[] {
   return response.content.filter((part): part is ToolCallPart => part.type === 'tool_call');
+}
+
+/**
+ * How many leading messages a request's cacheable prefix covers, or `undefined`
+ * when it declares none.
+ *
+ * A declaration of `0` and no declaration at all are different answers: `0`
+ * still means "cache `system` and `tools`", so callers must tell them apart.
+ * The count is clamped to the messages actually present — a caller that trims
+ * its history without updating the hint gets a shorter prefix, not a crash.
+ */
+export function cachePrefixLength(request: ModelRequest): number | undefined {
+  const declared = request.cachePrefix?.stableMessages;
+  if (declared === undefined) {
+    return undefined;
+  }
+  return Math.min(Math.max(Math.trunc(declared), 0), request.messages.length);
 }

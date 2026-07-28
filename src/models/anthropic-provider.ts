@@ -17,19 +17,38 @@ import Anthropic from '@anthropic-ai/sdk';
 import type {
   ContentPart,
   ModelMessage,
+  ModelRequest,
   ModelResponse,
   ResponsePart,
   StopReason,
   TaskKind,
+  ToolSchema,
   TokenUsage,
 } from './model-gateway.js';
-import { ModelGatewayError } from './model-gateway.js';
+import { cachePrefixLength, ModelGatewayError } from './model-gateway.js';
 import type { ModelProvider, ProviderCall } from './model-provider.js';
 
 const PROVIDER = 'anthropic';
 
 /** Non-streaming ceiling: high enough to be useful, low enough to not time out. */
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+
+/** The provider's cache marker. The default lifetime suits a live conversation. */
+const CACHE_BREAKPOINT = { type: 'ephemeral' } as const;
+
+/**
+ * The only block kinds this adapter emits — the three the port's `ContentPart`
+ * maps onto. Naming them (rather than using the provider's full block union)
+ * is what lets a cache breakpoint be attached: the union includes blocks, such
+ * as thinking, that do not accept one and that this adapter never produces.
+ */
+type EmittedBlock =
+  Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam | Anthropic.ToolResultBlockParam;
+
+interface EmittedMessage {
+  role: 'user' | 'assistant';
+  content: EmittedBlock[];
+}
 
 export interface AnthropicProviderOptions {
   /** Defaults to the SDK's own resolution (ANTHROPIC_API_KEY, or a profile). */
@@ -57,21 +76,7 @@ export class AnthropicProvider implements ModelProvider {
     let message: Anthropic.Message;
     try {
       message = await this.#client.messages.create(
-        {
-          model,
-          max_tokens: request.maxOutputTokens ?? this.#maxOutputTokens,
-          ...(request.system === undefined ? {} : { system: request.system }),
-          messages: request.messages.map(toAnthropicMessage),
-          ...(request.tools && request.tools.length > 0
-            ? {
-                tools: request.tools.map((tool) => ({
-                  name: tool.name,
-                  description: tool.description,
-                  input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
-                })),
-              }
-            : {}),
-        },
+        toCreateParams(model, request, this.#maxOutputTokens),
         signal ? { signal } : {},
       );
     } catch (error) {
@@ -88,14 +93,75 @@ export class AnthropicProvider implements ModelProvider {
   }
 }
 
-function toAnthropicMessage(message: ModelMessage): Anthropic.MessageParam {
+/**
+ * Translate a request, marking the caller's cacheable prefix if it declared one.
+ *
+ * The provider caches everything *before* a breakpoint and renders the prompt as
+ * tools → system → messages, so one marker at the end of the declared prefix
+ * covers exactly that region and nothing else. Deliberately no second marker at
+ * the end of the request: the tail changes every turn, and marking it would pay
+ * the write premium for an entry no later call can read.
+ */
+function toCreateParams(
+  model: string,
+  request: ModelRequest,
+  defaultMaxOutputTokens: number,
+): Anthropic.MessageCreateParamsNonStreaming {
+  const messages = request.messages.map(toAnthropicMessage);
+  const tools = request.tools?.length ? request.tools.map(toAnthropicTool) : undefined;
+  let system: string | Anthropic.TextBlockParam[] | undefined = request.system;
+
+  const prefixLength = cachePrefixLength(request);
+  if (prefixLength !== undefined) {
+    // Walk backwards through the prefix to the last block it actually contains:
+    // its final message, else the system prompt, else the last tool.
+    const lastPrefixMessage = prefixLength > 0 ? messages[prefixLength - 1] : undefined;
+    if (lastPrefixMessage) {
+      messages[prefixLength - 1] = markMessage(lastPrefixMessage);
+    } else if (request.system !== undefined) {
+      system = [{ type: 'text', text: request.system, cache_control: CACHE_BREAKPOINT }];
+    } else if (tools && tools.length > 0) {
+      tools[tools.length - 1] = { ...tools[tools.length - 1]!, cache_control: CACHE_BREAKPOINT };
+    }
+  }
+
+  return {
+    model,
+    max_tokens: request.maxOutputTokens ?? defaultMaxOutputTokens,
+    ...(system === undefined ? {} : { system }),
+    messages,
+    ...(tools === undefined ? {} : { tools }),
+  };
+}
+
+/** Put the cache breakpoint on a message's last block — the end of the prefix. */
+function markMessage(message: EmittedMessage): EmittedMessage {
+  const last = message.content[message.content.length - 1];
+  if (!last) {
+    return message;
+  }
+  return {
+    ...message,
+    content: [...message.content.slice(0, -1), { ...last, cache_control: CACHE_BREAKPOINT }],
+  };
+}
+
+function toAnthropicTool(tool: ToolSchema): Anthropic.Tool {
+  return {
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
+  };
+}
+
+function toAnthropicMessage(message: ModelMessage): EmittedMessage {
   return {
     role: message.role,
     content: message.content.map(toAnthropicContent),
   };
 }
 
-function toAnthropicContent(part: ContentPart): Anthropic.ContentBlockParam {
+function toAnthropicContent(part: ContentPart): EmittedBlock {
   switch (part.type) {
     case 'text':
       return { type: 'text', text: part.text };

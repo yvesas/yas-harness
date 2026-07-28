@@ -18,6 +18,7 @@ import type { CompressionEngine, ContextCompressor } from './context-compressor.
 import { RegexSensitivityGuard, type SensitivityGuard } from './sensitivity-gate.js';
 import { JsonTableEngine } from './engines/json-table-engine.js';
 import { WhitespaceEngine } from './engines/whitespace-engine.js';
+import type { TokenCounter } from '../models/token-counter.js';
 
 export type CompressionProfile = 'none' | 'light' | 'medium' | 'aggressive';
 
@@ -29,11 +30,19 @@ const PROFILES: Record<CompressionProfile, () => CompressionEngine[]> = {
   aggressive: () => [new WhitespaceEngine(), new JsonTableEngine()],
 };
 
-/** Build a compressor for a profile. Unknown profiles fall back to `none`. */
+/**
+ * Build a compressor for a profile. Unknown profiles fall back to `none`.
+ *
+ * `counter` is how a product swaps the default token counter for an exact,
+ * per-provider one; omit it to use the pipeline's provider-neutral default.
+ */
 export function compressorFor(
   profile: CompressionProfile,
   guard: SensitivityGuard = new RegexSensitivityGuard(),
+  counter?: TokenCounter,
 ): ContextCompressor {
   const engines = (PROFILES[profile] ?? PROFILES.none)();
-  return new CompressionPipeline(engines, guard);
+  return counter
+    ? new CompressionPipeline(engines, guard, counter)
+    : new CompressionPipeline(engines, guard);
 }

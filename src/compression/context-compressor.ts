@@ -13,24 +13,29 @@
  * discarded, so compression can never be destructive by accident.
  *
  * The vocabulary is provider-neutral (it works on a `ModelRequest`, ADR-002's
- * shape), and nothing here is product domain. Measuring the real token saving
- * and wiring this into the gateway's data path are later steps — this port is
- * the mechanism, off the hot path until it is measured and eval-gated.
+ * shape), and nothing here is product domain. The pipeline now measures the
+ * real token saving of each engine through a `TokenCounter` (E5.4); wiring this
+ * into the gateway's data path stays a later step — this port is the mechanism,
+ * off the hot path until an eval confirms answers don't degrade (E5.5).
  */
 
 import type { z } from 'zod';
 
 import type { ModelRequest } from '../models/model-gateway.js';
 
-/** What one engine did, in characters (a token proxy until E5.4 measures tokens). */
+/** What one engine did: characters (the cheap size signal) and measured tokens. */
 export interface EngineReport {
   readonly engine: string;
   /** False when the engine was a no-op or its output was rejected by the gate. */
   readonly applied: boolean;
   /** Why it did not apply, when it did not. */
   readonly reason?: string;
+  /** Characters before/after — the cheap, exact signal the reduction check uses. */
   readonly before: number;
   readonly after: number;
+  /** Tokens before/after, measured by the pipeline's `TokenCounter`. */
+  readonly beforeTokens: number;
+  readonly afterTokens: number;
 }
 
 /** The record of a whole compression pass, for logging and (later) `model_usage`. */
@@ -38,6 +43,8 @@ export interface CompressionReport {
   readonly engines: readonly EngineReport[];
   readonly before: number;
   readonly after: number;
+  readonly beforeTokens: number;
+  readonly afterTokens: number;
 }
 
 export interface CompressionResult {

@@ -343,6 +343,8 @@ export type {
   TokenUsage,
 } from './models/model-gateway.js';
 export type { ModelProvider, ProviderCall } from './models/model-provider.js';
+export type { TokenCounter } from './models/token-counter.js';
+export { GptTokenizerCounter } from './models/gpt-tokenizer-counter.js';
 export { RoutedGateway } from './models/routed-gateway.js';
 export { ScriptedGateway, callsTool, says } from './models/scripted-gateway.js';
 export { loadModelConfig, parseModelConfig } from './models/routing.js';

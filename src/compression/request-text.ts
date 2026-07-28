@@ -28,7 +28,11 @@ export function renderRequestText(request: ModelRequest): string {
   return parts.join('\n');
 }
 
-/** The size compression is judged by: characters, a token proxy until E5.4. */
+/**
+ * A request's size in characters — the cheap, exact signal the pipeline uses to
+ * decide whether an engine shrank the request. The billed cost is tokens, which
+ * the pipeline measures separately through a `TokenCounter`.
+ */
 export function requestSize(request: ModelRequest): number {
   return renderRequestText(request).length;
 }

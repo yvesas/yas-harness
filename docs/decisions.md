@@ -67,10 +67,22 @@ ADR instead.
   and `json-table` (a homogeneous JSON array of objects → a compact
   `{columns, rows}` table — drops repeated keys, keeps every value; if
   re-serialising would reformat a number, the gate discards it). It is **not
-  wired into the gateway** yet — compression enters the data
-  path only once its real token saving is measured (E5.4) and an eval confirms
-  answers don't degrade (E5.5). The strategy ADR is E5.8. Gate patterns are
-  linear (no ReDoS).
+  wired into the gateway** yet — compression enters the data path only once an
+  eval confirms answers don't degrade (E5.5). The strategy ADR is E5.8. Gate
+  patterns are linear (no ReDoS).
+- **Compression savings are measured in real tokens, through a port (E5.4).**
+  Tokens — not characters — are what a model bills, and no single tokenizer is
+  exact for Claude, GPT, Gemini and Llama at once (each keeps its own vocabulary;
+  some only expose a `count_tokens` API). So counting is a `TokenCounter` port: a
+  product injects an exact per-provider counter when it needs one, and the harness
+  ships a provider-neutral default, `GptTokenizerCounter` (real BPE via
+  `gpt-tokenizer`, o200k_base — exact for OpenAI, a ~5-15% approximation for the
+  others on English, offline so it can size a request before any call). The
+  pipeline reports per-engine tokens before/after via the counter; it still
+  decides "did the engine shrink it?" on characters (cheap and exact). This is
+  measurement, not the fixed compression ratio OmniRoute assumed. Persisting the
+  saving alongside `model_usage` waits for the gateway wiring (E5.5), where the
+  provider's own usage numbers land next to it.
 
 ## Connections and credentials
 

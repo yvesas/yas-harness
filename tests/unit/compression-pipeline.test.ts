@@ -17,6 +17,7 @@ import type { CompressionEngine } from '../../src/compression/context-compressor
 import { WhitespaceEngine } from '../../src/compression/engines/whitespace-engine.js';
 import { compressorFor } from '../../src/compression/profiles.js';
 import type { ModelRequest } from '../../src/models/model-gateway.js';
+import type { TokenCounter } from '../../src/models/token-counter.js';
 
 function textRequest(text: string): ModelRequest {
   return { task: 'reasoning', messages: [{ role: 'user', content: [{ type: 'text', text }] }] };
@@ -94,6 +95,63 @@ describe('CompressionPipeline', () => {
     pipeline.compress(textRequest('x'));
 
     expect(seen).toEqual(['first', 'second']);
+  });
+});
+
+/**
+ * A stand-in counter with a distinctive scale (ten tokens per character), so a
+ * test can tell the report's token numbers apart from its character counts and
+ * prove they come from the injected counter.
+ */
+class TenXCounter implements TokenCounter {
+  count(text: string): number {
+    return text.length * 10;
+  }
+}
+
+describe('CompressionPipeline token measurement (E5.4)', () => {
+  it('reports token counts from the injected counter, per engine and overall', () => {
+    // 'a   \n\n\n\nb' is 9 chars; whitespace trims it to 'a\n\nb', 4 chars.
+    const pipeline = new CompressionPipeline(
+      [new WhitespaceEngine()],
+      undefined,
+      new TenXCounter(),
+    );
+
+    const { report } = pipeline.compress(textRequest('a   \n\n\n\nb'));
+
+    expect(report).toMatchObject({ before: 9, after: 4, beforeTokens: 90, afterTokens: 40 });
+    expect(report.engines[0]).toMatchObject({
+      engine: 'whitespace',
+      applied: true,
+      beforeTokens: 90,
+      afterTokens: 40,
+    });
+  });
+
+  it('carries the before token count over when an engine does not apply', () => {
+    const pipeline = new CompressionPipeline(
+      [new WhitespaceEngine()],
+      undefined,
+      new TenXCounter(),
+    );
+
+    const { report } = pipeline.compress(textRequest('a\nb\nc')); // nothing to trim
+
+    expect(report.engines[0]).toMatchObject({
+      applied: false,
+      beforeTokens: 50,
+      afterTokens: 50,
+    });
+  });
+
+  it('measures real BPE tokens with the default counter', () => {
+    const { report } = new CompressionPipeline([new WhitespaceEngine()]).compress(
+      textRequest('a   \n\n\n\nb'),
+    );
+
+    expect(report.beforeTokens).toBeGreaterThan(0);
+    expect(report.afterTokens).toBeLessThanOrEqual(report.beforeTokens);
   });
 });
 

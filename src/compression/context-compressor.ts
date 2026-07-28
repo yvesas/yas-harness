@@ -38,6 +38,12 @@ export interface EngineReport {
   readonly afterTokens: number;
 }
 
+/** What a request's declared cacheable prefix costs, measured but never touched. */
+export interface CachePrefixReport {
+  readonly chars: number;
+  readonly tokens: number;
+}
+
 /** The record of a whole compression pass, for logging and (later) `model_usage`. */
 export interface CompressionReport {
   readonly engines: readonly EngineReport[];
@@ -45,6 +51,15 @@ export interface CompressionReport {
   readonly after: number;
   readonly beforeTokens: number;
   readonly afterTokens: number;
+  /**
+   * The cacheable prefix the request declared, which the pipeline excluded from
+   * compression on purpose (E5.7). Absent when the request declared none.
+   *
+   * Its size is deliberately **not** part of the numbers above: those describe
+   * the region that was eligible for compression, so a saving reads as a share
+   * of what could actually be compressed. The whole request is this plus that.
+   */
+  readonly cachePrefix?: CachePrefixReport;
 }
 
 export interface CompressionResult {

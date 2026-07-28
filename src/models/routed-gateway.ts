@@ -9,6 +9,7 @@
  * answered.
  */
 
+import type { SecretRedactor } from '../redaction/secret-redactor.js';
 import type { ModelUsageRecord, UsageRecorder } from '../telemetry/model-usage.js';
 import { computeCostUsd } from '../telemetry/model-usage.js';
 
@@ -24,6 +25,8 @@ export interface RoutedGatewayOptions {
   readonly recorder?: UsageRecorder;
   /** Attributed to every usage record; a product supplies the real tenant. */
   readonly tenantId?: string;
+  /** Scrubs secrets from the one thing this class logs; wired in production. */
+  readonly redactor?: SecretRedactor;
   /** Injected in tests so backoff does not make the suite slow. */
   readonly sleep?: (ms: number) => Promise<void>;
 }
@@ -36,6 +39,7 @@ export class RoutedGateway implements ModelGateway {
   readonly #providers: Map<string, ModelProvider>;
   readonly #recorder: UsageRecorder | undefined;
   readonly #tenantId: string;
+  readonly #redactor: SecretRedactor;
   readonly #sleep: (ms: number) => Promise<void>;
 
   constructor(options: RoutedGatewayOptions) {
@@ -43,6 +47,8 @@ export class RoutedGateway implements ModelGateway {
     this.#providers = new Map(options.providers.map((provider) => [provider.name, provider]));
     this.#recorder = options.recorder;
     this.#tenantId = options.tenantId ?? UNATTRIBUTED_TENANT;
+    // No redactor in tests means log as-is; production always wires the real one.
+    this.#redactor = options.redactor ?? { redact: (text) => text };
     this.#sleep = options.sleep ?? defaultSleep;
 
     // A route pointing at a provider nobody registered is a wiring mistake
@@ -150,7 +156,7 @@ export class RoutedGateway implements ModelGateway {
       // turn over it would be worse.
       console.warn('failed to record model usage', {
         model: record.modelReference,
-        error: error instanceof Error ? error.message : String(error),
+        error: this.#redactor.redact(error instanceof Error ? error.message : String(error)),
       });
     }
   }

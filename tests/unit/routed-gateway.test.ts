@@ -1,13 +1,14 @@
 // Copyright 2026 YAS Softwares LTDA
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { ModelRequest, ModelResponse } from '../../src/models/model-gateway.js';
 import { ModelGatewayError, userMessage } from '../../src/models/model-gateway.js';
 import type { ModelProvider, ProviderCall } from '../../src/models/model-provider.js';
 import { RoutedGateway } from '../../src/models/routed-gateway.js';
 import { parseModelConfig } from '../../src/models/routing.js';
+import { RegexSecretRedactor } from '../../src/redaction/regex-secret-redactor.js';
 import { InMemoryUsageRecorder } from '../../src/telemetry/model-usage.js';
 
 const TENANT = 'tenant-1';
@@ -236,6 +237,34 @@ describe('RoutedGateway', () => {
       });
 
       await expect(gateway.complete(request())).resolves.toMatchObject({ model: 'ok' });
+    });
+
+    it('redacts secrets from the error it logs when recording fails', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const gateway = new RoutedGateway({
+          config,
+          providers: [
+            new FakeProvider('groq', () => answer('ok')),
+            new FakeProvider('anthropic', () => answer('unused')),
+          ],
+          recorder: {
+            record: () =>
+              Promise.reject(new Error('write to postgres://user:s3cr3tpass@db failed')),
+          },
+          redactor: new RegexSecretRedactor(),
+          sleep: () => Promise.resolve(),
+        });
+
+        await gateway.complete(request());
+
+        expect(warn).toHaveBeenCalledWith(
+          'failed to record model usage',
+          expect.objectContaining({ error: 'write to postgres://[REDACTED]@db failed' }),
+        );
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 });

@@ -97,6 +97,18 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **Secret redaction is always-on, on the persistence and log path (E5.6b).**
+  A `SecretRedactor` port with a shape-based default (`RegexSecretRedactor`:
+  PEM blocks, JWTs, AWS/Google/GitHub/Slack/Stripe/OpenAI-style keys, Bearer
+  tokens, URL credentials, labelled `password=`) scrubs credentials out of free
+  text before it lands anywhere durable. It is the **inverse** of compression and
+  the gate — it destroys a value on purpose — so it is wired as an unconditional
+  decorator, never a discardable engine: over the session store (message
+  content), pool store (values), approval store (held tool input) and usage
+  recorder (`error_message`), plus the gateway's one log site. A `redactDeep`
+  helper walks arbitrary JSON payloads redacting string leaves. Patterns are
+  linear (no ReDoS); rules are shape-based so prices, dates and ids survive. In
+  `src/redaction/`; the redactor is instantiated once at the composition root.
 
 ## Connections and credentials
 

@@ -96,6 +96,25 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **Every external call in the connections layer has a deadline, and the caller
+  sets it (F7.0).** Ten connectors were calling `fetch` with no `AbortSignal`: a
+  source that accepts the connection and then goes quiet would hold a user's
+  turn open indefinitely, and nothing above could stop it. `ConnectorContext`
+  now carries a `signal` and every connector passes it down. The **duration is
+  policy and belongs to the caller** — `ConnectionManager` sets it (30s default,
+  configurable), not each connector, so a slow source cannot decide for itself
+  how long it may be slow. The clock starts **after** the credential resolves: a
+  slow token refresh is a different failure from a slow source, and charging one
+  against the other's budget reports the wrong one. An abort is translated to a
+  typed `ConnectorTimeoutError` naming the connector, the capability and the
+  budget, because the response to it differs from every other connector failure
+  — a 404 means ask for something else, a 401 means re-authorise, a timeout
+  means try again later — and a caller that cannot tell them apart retries the
+  wrong ones. The token endpoint gets its own, shorter budget (15s): it is a
+  small request that sits in front of the real work. Enforcement is a test that
+  **reads the connector sources** and fails when a `fetch` has no `signal` —
+  behavioural coverage would mean ten brittle fixtures for one property, while
+  what actually regresses is an eleventh connector forgetting it.
 - **Crossing the module boundary is asking, and the owner answers (F6.1).**
   A module's pool is private, so a module that needs what another holds sends a
   `ContextRequest` and the **owner** decides. The inversion is the point: if the

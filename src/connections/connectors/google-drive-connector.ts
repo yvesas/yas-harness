@@ -261,6 +261,7 @@ export class GoogleDriveConnector implements Connector {
   ): Promise<Response> {
     const token = this.#accessToken(context);
     const response = await this.#fetch(`${this.#apiBase}${path}`, {
+      signal: context.signal ?? null,
       method,
       headers: {
         authorization: `Bearer ${token}`,

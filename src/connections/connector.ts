@@ -91,6 +91,17 @@ export interface ConnectorContext {
   readonly tenantId: string;
   readonly connectionId: string;
   readonly credential: unknown;
+  /**
+   * The deadline for this call. A connector **must** pass it to every request
+   * it makes.
+   *
+   * The connector does not decide how long is too long — that is policy, and it
+   * belongs to the caller (`ConnectionManager` sets a default and lets a caller
+   * shorten it). What the connector owes is to be interruptible: an external
+   * API that stops answering must not hold a turn open forever, and only the
+   * code making the request can pass the signal down to it.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -122,6 +133,30 @@ export class ConnectorError extends Error {
   ) {
     super(message, options);
     this.name = 'ConnectorError';
+  }
+}
+
+/**
+ * Raised when a connector's request ran past its deadline.
+ *
+ * Its own type because the answer to it is different from every other connector
+ * failure: a 404 means ask for something else, a 401 means re-authorise, but a
+ * timeout means the source is not answering and the call can simply be tried
+ * again later. A caller that cannot tell them apart retries the wrong ones.
+ */
+export class ConnectorTimeoutError extends ConnectorError {
+  constructor(
+    connectorId: string,
+    readonly capability: string,
+    readonly timeoutMs: number,
+    options?: { cause?: unknown },
+  ) {
+    super(
+      `connector "${connectorId}" timed out after ${timeoutMs}ms on "${capability}"`,
+      connectorId,
+      options,
+    );
+    this.name = 'ConnectorTimeoutError';
   }
 }
 

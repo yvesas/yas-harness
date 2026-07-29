@@ -55,19 +55,30 @@ export class OAuthError extends Error {
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
+/** A token endpoint that stops answering must not hold a turn open either. */
+const DEFAULT_TOKEN_TIMEOUT_MS = 15_000;
+
 export interface OAuthClientOptions {
   readonly fetch?: typeof globalThis.fetch;
   /** Injected so expiry maths is testable; defaults to the wall clock. */
   readonly now?: () => Date;
+  /**
+   * Deadline for a call to a token endpoint, in milliseconds. Defaults to 15s —
+   * shorter than a connector's, because exchanging or refreshing a token is a
+   * small, fast request, and every one of them sits in front of the real work.
+   */
+  readonly requestTimeoutMs?: number;
 }
 
 export class OAuthClient {
   readonly #fetch: typeof globalThis.fetch;
   readonly #now: () => Date;
+  readonly #requestTimeoutMs: number;
 
   constructor(options: OAuthClientOptions = {}) {
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.#now = options.now ?? (() => new Date());
+    this.#requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_TOKEN_TIMEOUT_MS;
   }
 
   /**
@@ -143,8 +154,12 @@ export class OAuthClient {
           accept: 'application/json',
         },
         body,
+        signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });
     } catch (error) {
+      // A deadline that fires lands here as a transport fault, which is what it
+      // is: nothing was rejected, the endpoint simply did not answer in time.
+      // Retryable, like the rest of this branch.
       throw new OAuthError(`token request failed: ${message(error)}`, {
         provider: providerId,
         retryable: true,

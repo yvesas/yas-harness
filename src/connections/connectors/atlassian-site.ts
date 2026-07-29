@@ -66,6 +66,7 @@ export class AtlassianSite {
     const url = `${this.#apiBase}/ex/${this.#product}/${cloudId}${path}`;
 
     const response = await this.#fetch(url, {
+      signal: context.signal ?? null,
       method,
       headers: {
         authorization: `Bearer ${token}`,
@@ -98,6 +99,7 @@ export class AtlassianSite {
     }
 
     const response = await this.#fetch(`${this.#apiBase}/oauth/token/accessible-resources`, {
+      signal: context.signal ?? null,
       headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
     });
     if (!response.ok) {

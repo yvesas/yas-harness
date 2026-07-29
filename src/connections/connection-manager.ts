@@ -28,7 +28,7 @@ import type {
   ResourcePatch,
   SearchOptions,
 } from './connector.js';
-import { ConnectorError } from './connector.js';
+import { ConnectorError, ConnectorTimeoutError } from './connector.js';
 import type { ConnectorRegistry } from './connector-registry.js';
 import type { Connection } from './connection-store.js';
 import type { CredentialResolver } from './credential-resolver.js';
@@ -41,19 +41,36 @@ export class ConnectionManagerError extends Error {
   }
 }
 
+/** How long an external source gets before the call is abandoned. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+export interface ConnectionManagerOptions {
+  /**
+   * Deadline for one connector call, in milliseconds. Defaults to 30s.
+   *
+   * The deadline is set here rather than in each connector on purpose: how long
+   * a source may take is policy, and policy belongs to the caller. A connector
+   * only has to honour the signal it is handed.
+   */
+  readonly requestTimeoutMs?: number;
+}
+
 export class ConnectionManager {
   readonly #connectors: ConnectorRegistry;
   readonly #connections: ConnectionStore;
   readonly #resolver: CredentialResolver;
+  readonly #requestTimeoutMs: number;
 
   constructor(
     connectors: ConnectorRegistry,
     connections: ConnectionStore,
     resolver: CredentialResolver,
+    options: ConnectionManagerOptions = {},
   ) {
     this.#connectors = connectors;
     this.#connections = connections;
     this.#resolver = resolver;
+    this.#requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   list(tenantId: string, connectionId: string, options?: ListOptions): Promise<ResourcePage> {
@@ -138,8 +155,25 @@ export class ConnectionManager {
       throw new ConnectionManagerError(`connection "${connectionId}" has no stored credential`);
     }
 
-    const context: ConnectorContext = { tenantId, connectionId, credential };
-    return operation(connector, context);
+    // The deadline starts here, after the credential is resolved: a slow token
+    // refresh is a different failure from a slow source, and charging the
+    // refresh against the source's budget would report the wrong one.
+    const signal = AbortSignal.timeout(this.#requestTimeoutMs);
+    const context: ConnectorContext = { tenantId, connectionId, credential, signal };
+
+    try {
+      return await operation(connector, context);
+    } catch (error) {
+      // A connector that honoured the signal throws whatever `fetch` throws on
+      // abort — a bare DOMException that says nothing about which source stopped
+      // answering. Give it a name a trace can act on.
+      if (isAbort(error)) {
+        throw new ConnectorTimeoutError(connector.id, capability, this.#requestTimeoutMs, {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   /**
@@ -161,4 +195,16 @@ export class ConnectionManager {
       throw error;
     }
   }
+}
+
+/**
+ * Whether a failure is the deadline firing rather than the source answering.
+ *
+ * Matched on `name`, not on class: `AbortSignal.timeout` raises a
+ * `TimeoutError` and an explicit abort raises an `AbortError`, and which of the
+ * two surfaces depends on the fetch implementation. Both mean the same thing
+ * here — the call was cut short, not answered.
+ */
+function isAbort(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
 }

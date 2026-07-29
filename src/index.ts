@@ -256,6 +256,7 @@ export type {
 } from './connections/connection-store.js';
 export {
   ConnectorError,
+  ConnectorTimeoutError,
   ResourceNotFoundError,
   assertConnectorConsistent,
 } from './connections/connector.js';
@@ -272,6 +273,7 @@ export type {
 } from './connections/connector.js';
 export { ConnectorRegistry } from './connections/connector-registry.js';
 export { ConnectionManager, ConnectionManagerError } from './connections/connection-manager.js';
+export type { ConnectionManagerOptions } from './connections/connection-manager.js';
 export { CachedConnections } from './connections/cached-connections.js';
 export type {
   ConnectionOperations,

@@ -189,6 +189,7 @@ export class CalendlyConnector implements Connector {
     body?: unknown,
   ): Promise<T> {
     const response = await this.#fetch(`${this.#apiBase}${path}`, {
+      signal: context.signal ?? null,
       method,
       headers: {
         authorization: `Bearer ${this.#accessToken(context)}`,

@@ -269,6 +269,7 @@ export class SlackConnector implements Connector {
   ): Promise<T> {
     const query = new URLSearchParams(params).toString();
     const response = await this.#fetch(`${this.#apiBase}/${method}?${query}`, {
+      signal: context.signal ?? null,
       headers: { authorization: `Bearer ${this.#accessToken(context)}` },
     });
     return this.#unwrap<T>(response, method);
@@ -280,6 +281,7 @@ export class SlackConnector implements Connector {
     body: Record<string, unknown>,
   ): Promise<T> {
     const response = await this.#fetch(`${this.#apiBase}/${method}`, {
+      signal: context.signal ?? null,
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.#accessToken(context)}`,

@@ -26,8 +26,19 @@ export class GitHubGraphQL {
     private readonly baseUrl: string = GITHUB_API,
   ) {}
 
-  async query<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
+  /**
+   * `signal` is a parameter rather than something read off a context because
+   * this helper is deliberately context-free — it takes a token, not a
+   * connection. The caller, which has both, hands the deadline down.
+   */
+  async query<T>(
+    token: string,
+    query: string,
+    variables: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const response = await this.fetch(`${this.baseUrl}/graphql`, {
+      signal: signal ?? null,
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,

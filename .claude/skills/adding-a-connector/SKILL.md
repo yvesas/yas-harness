@@ -64,7 +64,32 @@ call. Use it to authenticate the outbound request and nothing else:
 This is what keeps the agent from ever seeing a key. A connector that leaks the
 credential upward breaks the one property the connection layer exists to hold.
 
-## 4. Register it
+## 4. Honour the deadline
+
+`ctx.signal` carries the deadline for this call. **Pass it to every request you
+make** — it is one line, and it is not optional:
+
+```ts
+const response = await this.#fetch(url, {
+  signal: ctx.signal ?? null,
+  method,
+  headers: { authorization: `Bearer ${token}` },
+});
+```
+
+You do not decide how long is too long — that is policy, and the
+`ConnectionManager` owns it (30s by default, configurable). What you owe is to
+be interruptible: an API that accepts the connection and then goes quiet will
+otherwise hold a user's turn open forever, and nothing above you can stop it.
+
+A test reads the connector sources and fails if a `fetch` call has no `signal`
+(`tests/unit/connector-timeouts.test.ts`), so forgetting this is caught in CI.
+
+If you write a context-free helper (like `GitHubGraphQL`, which takes a token
+rather than a connection), give it a `signal?: AbortSignal` parameter and pass
+`ctx.signal` from the caller.
+
+## 5. Register it
 
 ```ts
 connectors.register(new ConfluenceConnector());
@@ -73,7 +98,7 @@ connectors.register(new ConfluenceConnector());
 Register once, at startup. The manager then routes any connection whose
 `connectorId` is `"confluence"` to it.
 
-## 5. Before the pull request
+## 6. Before the pull request
 
 - [ ] `capabilities` lists only what is implemented; the registry check passes
 - [ ] Every operation maps the source's shape to a `Resource`, with extras in
@@ -81,6 +106,7 @@ Register once, at startup. The manager then routes any connection whose
 - [ ] Editing works if the source supports it — `create`/`update`/`delete`
 - [ ] The credential is used only to authenticate; never logged, stored, or
       returned
+- [ ] **Every `fetch` passes `ctx.signal`** — the deadline test reads the source
 - [ ] Tests against a mocked source (no live network), covering read and, if
       supported, an edit round-trip
 - [ ] No business/product domain in the connector

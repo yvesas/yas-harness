@@ -586,6 +586,7 @@ export class GitHubConnector implements Connector {
   ): Promise<T> {
     const token = this.#accessToken(context);
     const response = await this.#fetch(`${this.#apiBase}${path}`, {
+      signal: context.signal ?? null,
       method,
       headers: {
         authorization: `Bearer ${token}`,
@@ -615,7 +616,12 @@ export class GitHubConnector implements Connector {
     variables: Record<string, unknown>,
   ): Promise<T> {
     try {
-      return await this.#graphql.query<T>(this.#accessToken(context), query, variables);
+      return await this.#graphql.query<T>(
+        this.#accessToken(context),
+        query,
+        variables,
+        context.signal,
+      );
     } catch (error) {
       if (error instanceof GitHubGraphQLNotFound) {
         throw new ResourceNotFoundError(this.id, error.message);

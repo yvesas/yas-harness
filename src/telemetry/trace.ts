@@ -31,6 +31,8 @@ export type TraceStepKind =
   | 'model_call'
   /** One tool ran and returned. */
   | 'tool_call'
+  /** One module asked another for context, and the owner answered. */
+  | 'context_request'
   /** The turn stopped and is waiting for a human decision. */
   | 'approval'
   /** The turn ended, however it ended. */

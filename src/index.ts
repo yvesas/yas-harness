@@ -52,6 +52,7 @@ import { ModuleRegistry } from './modules/module.js';
 import { PostgresPoolStore } from './pools/postgres-pool-store.js';
 import { RedactingPoolStore } from './pools/redacting-pool-store.js';
 import type { PoolStore } from './pools/pool-store.js';
+import { ContextBroker } from './pools/context-broker.js';
 import { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
 import { Router } from './router/router.js';
 import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
@@ -70,6 +71,11 @@ export interface Harness {
   readonly modules: ModuleRegistry;
   readonly router: Router;
   readonly pools: PoolStore;
+  /**
+   * Carries a context request to the module that owns the data. A module that
+   * declares no `disclose` shares nothing, so this is safe to hand out.
+   */
+  readonly context: ContextBroker;
   /**
    * Where each step of a turn is written, redacted on the way. This is the
    * write side; reading a trace back is a query a product owns, against the
@@ -217,6 +223,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     router: new Router(gateway, modules, traces),
     traces,
     pools,
+    context: new ContextBroker(modules, { traces }),
     approvals,
     connections,
     connectors,
@@ -428,3 +435,12 @@ export { InMemoryPoolStore } from './pools/in-memory-pool-store.js';
 export { PostgresPoolStore } from './pools/postgres-pool-store.js';
 export { PoolError, assertValidKey } from './pools/pool-store.js';
 export type { PoolEntry, PoolScope, PoolStore } from './pools/pool-store.js';
+export { ContextBroker } from './pools/context-broker.js';
+export type { ContextBrokerOptions } from './pools/context-broker.js';
+export { ContextError, denied, granted } from './pools/context.js';
+export type {
+  ContextDiscloser,
+  ContextEntry,
+  ContextGrant,
+  ContextRequest,
+} from './pools/context.js';

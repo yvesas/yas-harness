@@ -70,7 +70,7 @@ without a network or an API bill.
 | `src/modules/` | Module contract and registry (no business modules) |
 | `src/models/` | Model gateway, provider port, routing config |
 | `src/memory/` | Session and conversation state |
-| `src/pools/` | Per-module data pools |
+| `src/pools/` | Per-module data pools, and the ask-the-owner flow across them |
 | `src/telemetry/` | What a turn cost (`model_usage`) and what it did (`traces`) |
 | `src/connections/` | External connectors, connections and the credential vault |
 | `src/connections/connectors/` | Concrete connectors (Confluence, Jira, GitHub, Google Drive, Slack, Notion, Google Calendar, Cal.com, Calendly, Microsoft Teams) and shared Atlassian plumbing |
@@ -154,6 +154,12 @@ in-memory double could agree with a wrong constraint.
   harness in a message, a tool input or a provider error does not land in a
   table or a log in the clear. It is unconditional by design: unlike a
   compression engine, it can never be skipped by a gate.
+- A module never reads another module's data. Crossing that boundary is done
+  by asking: the requester sends a purpose, and the **owner** decides what to
+  reveal — a summary rather than the rows, or a refusal with a reason. Sharing
+  is opt-in per module and fails closed (a module that declares no `disclose`
+  shares nothing), and every exchange is recorded as a `context_request` trace
+  step, values excluded.
 - Inbound channel messages are treated as untrusted input.
 - Context sent to a model can be compressed, but never silently. Engines run
   behind a sensitivity gate that discards any output which would change a

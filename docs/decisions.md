@@ -96,6 +96,26 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **Crossing the module boundary is asking, and the owner answers (F6.1).**
+  A module's pool is private, so a module that needs what another holds sends a
+  `ContextRequest` and the **owner** decides. The inversion is the point: if the
+  requester could read, every module would have to trust every other module
+  forever and the decision would sit far from the data; because the owner
+  answers, it decides per request — with the purpose in front of it — and can
+  reveal a summary instead of the rows, or refuse with a reason the requester
+  can pass to the user. Sharing is opt-in on the `ModuleDefinition` (`disclose`)
+  and **fails closed**: a module that declares none shares nothing, because
+  silence is not consent. A purpose is required — it is what the owner judges,
+  and the safe answer to an undecidable request is no. `ContextBroker` is
+  deliberately thin: it does not decide, cache, merge or widen, since each would
+  move a judgement somewhere the owner cannot see. A wiring mistake (unknown
+  module, empty purpose, a module asking itself) **throws** rather than being
+  reported as a denial, so a caller cannot mistake a bug for a policy. Every
+  exchange is recorded as a `context_request` trace step — the only point where
+  data crosses a module boundary, so the one most worth auditing — carrying who
+  asked, for what, and which keys came back, but **not the values**: those are
+  the owner's data and stay in its pool. What the harness cannot do is
+  authenticate the requester; it discloses to whoever the caller names.
 - **A trace is a flat list of steps, and it dies with its conversation (F6.2).**
   `model_usage` answers "what did this cost"; the `traces` table answers "what
   happened" — input, routing decision, each model call, each tool, the ending.

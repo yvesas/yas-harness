@@ -45,9 +45,41 @@ The harness knows how to route, execute, store and record. It does not know
 what an expense *is* — that is the module's job, and the module's alone.
 
 - A module never reads another module's pool. To use another module's context,
-  ask it (the cross-module permission flow), never query its rows.
+  ask it through the `ContextBroker` (below), never query its rows.
 - Business rules ("an expense over R$500 needs approval") live in the module's
   tools, not in the harness.
+
+### Sharing context with other modules
+
+Declare `disclose` to answer other modules; leave it out and your module shares
+nothing. The owner decides **per request**, with the purpose in front of it, and
+may reveal a summary instead of the rows:
+
+```ts
+modules.register({
+  id: 'finance',
+  description: '...',
+  tools,
+  disclose: async (request) => {
+    if (!request.purpose.includes('affordability')) {
+      return denied('balances are only shared to judge affordability');
+    }
+    // A band, not the balance: reveal the least that answers the question.
+    return granted([{ key: 'balance-band', value: await bandFor(request.tenantId) }]);
+  },
+});
+```
+
+To ask another module, go through the broker — never call its `disclose`
+directly, or the exchange escapes the trace:
+
+```ts
+const grant = await harness.context.request({
+  tenantId, requester: 'travel', owner: 'finance',
+  purpose: 'affordability of a trip the user is planning',
+});
+if (grant.status === 'denied') { /* tell the user why, using grant.reason */ }
+```
 
 ## 3. Store data in the pool, scoped
 

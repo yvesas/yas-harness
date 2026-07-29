@@ -26,6 +26,8 @@ import type {
 import { responseText, toolCalls } from '../models/model-gateway.js';
 import type { SessionStore } from '../memory/session-store.js';
 import { SessionNotFoundError } from '../memory/session-store.js';
+import type { TraceRecorder } from '../telemetry/trace.js';
+import { TurnTrace } from '../telemetry/trace.js';
 
 import type { Persona } from './persona.js';
 import type { ToolRegistry } from './tool.js';
@@ -41,17 +43,28 @@ export interface AgentDependencies {
    * that has not wired approval yet from running sensitive actions unchecked.
    */
   readonly approvals?: ApprovalStore;
+  /**
+   * Where the steps of a turn are written. Without it the agent runs exactly as
+   * before and records nothing — tracing is off until a product wires it.
+   */
+  readonly traces?: TraceRecorder;
 }
 
 export interface AgentTurn {
   readonly tenantId: string;
   readonly sessionId: string;
   readonly input: string;
+  /**
+   * Joins this turn to a trace the caller already started — a routing decision,
+   * typically. Omit and the agent begins one.
+   */
+  readonly traceId?: string;
 }
 
 export interface ResumeInput {
   readonly tenantId: string;
   readonly sessionId: string;
+  readonly traceId?: string;
 }
 
 /** One tool call and what it produced, kept for the trace. */
@@ -74,6 +87,8 @@ export interface AgentReply {
   readonly stopReason: StopReason;
   /** Set when stopReason is 'awaiting_approval': the calls waiting on a human. */
   readonly pendingApprovals?: readonly Approval[];
+  /** This turn's trace, so a caller can look up what happened. */
+  readonly traceId: string;
 }
 
 export class AgentError extends Error {
@@ -86,6 +101,7 @@ export class AgentError extends Error {
 interface Context {
   readonly tenantId: string;
   readonly sessionId: string;
+  readonly trace: TurnTrace;
 }
 
 /** The two ways a tool-call turn resolves before the loop can continue. */
@@ -99,6 +115,7 @@ export class Agent {
   readonly #tools: ToolRegistry;
   readonly #persona: Persona;
   readonly #approvals: ApprovalStore | undefined;
+  readonly #traces: TraceRecorder | undefined;
 
   constructor(dependencies: AgentDependencies) {
     this.#gateway = dependencies.gateway;
@@ -106,6 +123,19 @@ export class Agent {
     this.#tools = dependencies.tools;
     this.#persona = dependencies.persona;
     this.#approvals = dependencies.approvals;
+    this.#traces = dependencies.traces;
+  }
+
+  #context(input: { tenantId: string; sessionId: string; traceId?: string }): Context {
+    return {
+      tenantId: input.tenantId,
+      sessionId: input.sessionId,
+      trace: new TurnTrace(this.#traces, {
+        tenantId: input.tenantId,
+        sessionId: input.sessionId,
+        ...(input.traceId === undefined ? {} : { traceId: input.traceId }),
+      }),
+    };
   }
 
   /**
@@ -117,8 +147,17 @@ export class Agent {
    * up, the turn pauses and returns 'awaiting_approval'.
    */
   async run(turn: AgentTurn): Promise<AgentReply> {
-    const ctx: Context = { tenantId: turn.tenantId, sessionId: turn.sessionId };
+    const ctx = this.#context(turn);
     await this.#requireSession(ctx);
+
+    // The message itself is not copied into the step: it is already stored, in
+    // full, on this session. Repeating it would double the exposure of the
+    // user's own words for no information a reader of the trace lacks.
+    await ctx.trace.step({
+      kind: 'input',
+      succeeded: true,
+      detail: { characters: turn.input.length },
+    });
 
     const userTurn: ModelMessage = { role: 'user', content: [{ type: 'text', text: turn.input }] };
     await this.#sessions.append(ctx.tenantId, ctx.sessionId, [userTurn]);
@@ -135,7 +174,7 @@ export class Agent {
    * pauses again rather than running a half-approved turn.
    */
   async resume(input: ResumeInput): Promise<AgentReply> {
-    const ctx: Context = { tenantId: input.tenantId, sessionId: input.sessionId };
+    const ctx = this.#context(input);
     await this.#requireSession(ctx);
 
     const history: ModelMessage[] = await this.#sessions.messages(ctx.tenantId, ctx.sessionId);
@@ -152,7 +191,7 @@ export class Agent {
     const invocations: ToolInvocation[] = [];
     const settlement = await this.#settle(ctx, calls, invocations);
     if (settlement.status === 'awaiting') {
-      return awaitingReply(settlement.pending);
+      return this.#finish(ctx, awaitingReply(settlement.pending, ctx.trace.traceId));
     }
 
     const resultTurn: ModelMessage = { role: 'user', content: settlement.results };
@@ -172,16 +211,43 @@ export class Agent {
     const toolSchemas = this.#tools.size > 0 ? this.#tools.schemas() : undefined;
 
     for (let iteration = 0; iteration < this.#persona.maxToolIterations; iteration += 1) {
-      const response = await this.#gateway.complete({
-        task: this.#persona.task,
-        system: this.#persona.instructions,
-        attribution: { tenantId: ctx.tenantId, sessionId: ctx.sessionId },
-        // A snapshot, not the working array: the loop keeps appending to
-        // `history`, and an adapter must see it as it was at call time.
-        messages: [...history],
-        ...(toolSchemas ? { tools: toolSchemas } : {}),
-      });
+      let response;
+      try {
+        response = await this.#gateway.complete({
+          task: this.#persona.task,
+          system: this.#persona.instructions,
+          attribution: { tenantId: ctx.tenantId, sessionId: ctx.sessionId },
+          // A snapshot, not the working array: the loop keeps appending to
+          // `history`, and an adapter must see it as it was at call time.
+          messages: [...history],
+          ...(toolSchemas ? { tools: toolSchemas } : {}),
+        });
+      } catch (error) {
+        // A turn that died on the model call is exactly what a trace is for:
+        // record the failed step, then let the error go where it was going.
+        await ctx.trace.step({
+          kind: 'model_call',
+          succeeded: false,
+          detail: { iteration },
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+
       usage.add(response.usage);
+      await ctx.trace.step({
+        kind: 'model_call',
+        label: response.model,
+        durationMs: response.latencyMs,
+        succeeded: true,
+        detail: {
+          iteration,
+          stopReason: response.stopReason,
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          cachedInputTokens: response.usage.cachedInputTokens,
+        },
+      });
 
       const assistantTurn: ModelMessage = { role: 'assistant', content: response.content };
       history.push(assistantTurn);
@@ -189,23 +255,24 @@ export class Agent {
 
       const calls = toolCalls(response);
       if (response.stopReason !== 'tool_call' || calls.length === 0) {
-        return {
+        return this.#finish(ctx, {
           text: responseText(response),
           toolInvocations: invocations,
           modelCalls: usage.calls,
           usage: usage.total(),
           stopReason: response.stopReason === 'tool_call' ? 'end_turn' : response.stopReason,
-        };
+          traceId: ctx.trace.traceId,
+        });
       }
 
       const settlement = await this.#settle(ctx, calls, invocations);
       if (settlement.status === 'awaiting') {
-        return {
-          ...awaitingReply(settlement.pending),
+        return this.#finish(ctx, {
+          ...awaitingReply(settlement.pending, ctx.trace.traceId),
           toolInvocations: invocations,
           modelCalls: usage.calls,
           usage: usage.total(),
-        };
+        });
       }
 
       const resultTurn: ModelMessage = { role: 'user', content: settlement.results };
@@ -215,13 +282,36 @@ export class Agent {
 
     // Out of iterations with the model still asking for tools. Returning what
     // we have beats looping: a stuck agent is a bug to see, not to hide.
-    return {
+    return this.#finish(ctx, {
       text: '',
       toolInvocations: invocations,
       modelCalls: usage.calls,
       usage: usage.total(),
       stopReason: 'iteration_limit',
-    };
+      traceId: ctx.trace.traceId,
+    });
+  }
+
+  /**
+   * Close the trace and hand back the reply.
+   *
+   * Every way a turn can end goes through here, so a trace always has a last
+   * step saying how — including the ones that are not an answer: a pause for
+   * approval and an exhausted iteration budget are the two outcomes someone
+   * reading a trace is most likely to be looking for.
+   */
+  async #finish(ctx: Context, reply: AgentReply): Promise<AgentReply> {
+    await ctx.trace.step({
+      kind: 'reply',
+      label: reply.stopReason,
+      succeeded: reply.stopReason !== 'iteration_limit' && reply.stopReason !== 'refusal',
+      detail: {
+        modelCalls: reply.modelCalls,
+        toolCalls: reply.toolInvocations.length,
+        characters: reply.text.length,
+      },
+    });
+    return reply;
   }
 
   /**
@@ -264,6 +354,11 @@ export class Agent {
 
       const stillPending = [...byToolCall.values()].filter((a) => a.status === 'pending');
       if (stillPending.length > 0) {
+        await ctx.trace.step({
+          kind: 'approval',
+          succeeded: true,
+          detail: { waitingOn: stillPending.map((approval) => approval.toolName) },
+        });
         return { status: 'awaiting', pending: stillPending };
       }
     }
@@ -284,7 +379,19 @@ export class Agent {
         : new Map<string, Approval>();
 
     for (const call of calls) {
+      const startedAt = performance.now();
       const result = await this.#runCall(ctx, call, decisions.get(call.id));
+      await ctx.trace.step({
+        kind: 'tool_call',
+        label: call.name,
+        durationMs: Math.round(performance.now() - startedAt),
+        succeeded: !result.isError,
+        // The input is what makes a tool step readable — the same call with
+        // different arguments is a different event. It is redacted on the way
+        // to storage, like every other free-form field.
+        detail: { input: call.input },
+        ...(result.isError ? { errorMessage: result.content } : {}),
+      });
       invocations.push({
         name: call.name,
         input: call.input,
@@ -329,7 +436,11 @@ export class Agent {
       }
     }
 
-    return this.#tools.execute(call.name, call.input, ctx);
+    // Only the identity of the turn crosses into a tool, never its tracer.
+    return this.#tools.execute(call.name, call.input, {
+      tenantId: ctx.tenantId,
+      sessionId: ctx.sessionId,
+    });
   }
 
   async #requireSession(ctx: Context): Promise<void> {
@@ -340,7 +451,7 @@ export class Agent {
   }
 }
 
-function awaitingReply(pending: Approval[]): AgentReply {
+function awaitingReply(pending: Approval[], traceId: string): AgentReply {
   return {
     text: '',
     toolInvocations: [],
@@ -348,6 +459,7 @@ function awaitingReply(pending: Approval[]): AgentReply {
     usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
     stopReason: 'awaiting_approval',
     pendingApprovals: pending,
+    traceId,
   };
 }
 

@@ -96,6 +96,26 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **A trace is a flat list of steps, and it dies with its conversation (F6.2).**
+  `model_usage` answers "what did this cost"; the `traces` table answers "what
+  happened" — input, routing decision, each model call, each tool, the ending.
+  They are separate tables because their **lifetimes are opposite**: a usage row
+  survives a deleted conversation (the money was spent) while a trace must not,
+  because it carries the user's own words — so `traces` cascades on the session
+  and `model_usage` only nulls `session_id`. The shape is a flat, ordered list
+  sharing a `traceId`, not a tree: enough to reconstruct a turn, appendable as
+  it happens (a turn that dies half way still shows how far it got), and already
+  span-shaped for the OpenTelemetry exporter that is a later slice. Order is an
+  explicit `sequence`, not `created_at` — `now()` is the transaction timestamp,
+  so steps written together would sort arbitrarily — and `(tenant, trace,
+  sequence)` is unique, making a duplicated position a failed write rather than
+  a trace that silently misreads. The user's message is **not** copied into the
+  step: it is already on the session, and repeating it would double the exposure
+  for no information a reader lacks. `detail` and `errorMessage` are redacted;
+  `label` is not, being a name the harness chose. A caller may pass one
+  `traceId` to both `Router.route` and `Agent.run` so the decision and the turn
+  it chose read as one trace. Off unless a recorder is wired, and a recorder
+  that throws never reaches the turn.
 - **Compression is wired into the gateway, but a product turns it on (E5.5).**
   `RoutedGateway` takes an optional `ContextCompressor` and, when given one,
   compresses **once before the fallback chain** — every candidate then gets the

@@ -38,6 +38,7 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `Connector` | `src/connections/connector.ts` | Confluence, Jira, GitHub, Drive, Slack, Notion, Calendar, Cal.com, Calendly, Teams, `MemoryConnector` |
 | `ResourceCacheStore` | `src/connections/resource-cache-store.ts` | `PostgresResourceCacheStore`, `InMemoryResourceCacheStore` |
 | `UsageRecorder` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
+| `TraceRecorder` | `src/telemetry/trace.ts` | `PostgresTraceRecorder`, `InMemoryTraceRecorder` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden
 in `tests/` — products that fork the harness need them to test their own agents
@@ -70,7 +71,7 @@ without a network or an API bill.
 | `src/models/` | Model gateway, provider port, routing config |
 | `src/memory/` | Session and conversation state |
 | `src/pools/` | Per-module data pools |
-| `src/telemetry/` | Model usage and cost |
+| `src/telemetry/` | What a turn cost (`model_usage`) and what it did (`traces`) |
 | `src/connections/` | External connectors, connections and the credential vault |
 | `src/connections/connectors/` | Concrete connectors (Confluence, Jira, GitHub, Google Drive, Slack, Notion, Google Calendar, Cal.com, Calendly, Microsoft Teams) and shared Atlassian plumbing |
 | `src/mcp/` | MCP server exposing the connectors as tools (mechanics, no transport) |
@@ -99,6 +100,11 @@ without a network or an API bill.
    loses the in-flight call but not the conversation. A paused turn's state
    lives entirely in the session and the approval queue, so the pause survives
    a restart and holds no process open.
+6. **Trace.** Each of those steps is also written to `traces` as it happens —
+   the routing decision, every model call with its duration, every tool with its
+   input, the pause for a human, and how the turn ended. Pass one `traceId` to
+   both the router and the agent and the whole thing reads as one trace. Off
+   unless a recorder is wired, and a recorder that fails never breaks the turn.
 
 ## Multi-tenancy
 

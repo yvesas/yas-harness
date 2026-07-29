@@ -54,8 +54,11 @@ import { RedactingPoolStore } from './pools/redacting-pool-store.js';
 import type { PoolStore } from './pools/pool-store.js';
 import { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
 import { Router } from './router/router.js';
+import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
+import { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
 import { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
+import type { TraceRecorder } from './telemetry/trace.js';
 
 export const HARNESS_NAME = 'yas-harness';
 
@@ -67,6 +70,12 @@ export interface Harness {
   readonly modules: ModuleRegistry;
   readonly router: Router;
   readonly pools: PoolStore;
+  /**
+   * Where each step of a turn is written, redacted on the way. This is the
+   * write side; reading a trace back is a query a product owns, against the
+   * `traces` table or through `PostgresTraceRecorder.trace()`.
+   */
+  readonly traces: TraceRecorder;
   readonly approvals: ApprovalStore;
   readonly connections: ConnectionStore;
   readonly connectors: ConnectorRegistry;
@@ -195,13 +204,18 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     mcpServer = new McpServer(cachedConnections, { name: HARNESS_NAME });
   }
 
+  // Traces carry the user's own words and a tool's input, so they go through
+  // the redactor like every other durable path.
+  const traces = new RedactingTraceRecorder(new PostgresTraceRecorder(pool), redactor);
+
   return {
-    agent: new Agent({ gateway, sessions, tools, persona, approvals }),
+    agent: new Agent({ gateway, sessions, tools, persona, approvals, traces }),
     sessions,
     gateway,
     tools,
     modules,
-    router: new Router(gateway, modules),
+    router: new Router(gateway, modules, traces),
+    traces,
     pools,
     approvals,
     connections,
@@ -388,6 +402,16 @@ export { InMemoryUsageRecorder, computeCostUsd } from './telemetry/model-usage.j
 export type { CompressionUsage, ModelUsageRecord, UsageRecorder } from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
+export { InMemoryTraceRecorder, TurnTrace } from './telemetry/trace.js';
+export type {
+  TraceRecorder,
+  TraceStep,
+  TraceStepInput,
+  TraceStepKind,
+  TurnTraceContext,
+} from './telemetry/trace.js';
+export { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
+export { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
 export { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
 export { redactDeep } from './redaction/secret-redactor.js';
 export type { SecretRedactor } from './redaction/secret-redactor.js';

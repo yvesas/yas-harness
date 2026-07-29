@@ -14,6 +14,8 @@ import { z } from 'zod';
 import type { ModelGateway, RequestAttribution } from '../models/model-gateway.js';
 import { responseText, userMessage } from '../models/model-gateway.js';
 import type { ModuleRegistry } from '../modules/module.js';
+import type { TraceRecorder } from '../telemetry/trace.js';
+import { TurnTrace } from '../telemetry/trace.js';
 
 export interface RouteDecision {
   readonly moduleId: string;
@@ -21,11 +23,18 @@ export interface RouteDecision {
   readonly confidence: number;
   /** Why this module, in the router's words. For traces and evals. */
   readonly reason: string;
+  /**
+   * The trace this decision was recorded under. Pass it to `Agent.run` and the
+   * routing step and the turn it chose read as one trace instead of two.
+   */
+  readonly traceId: string;
 }
 
 export interface RouteInput {
   readonly text: string;
   readonly attribution?: RequestAttribution;
+  /** Joins this decision to a trace the caller already started. */
+  readonly traceId?: string;
 }
 
 export class RouterError extends Error {
@@ -53,49 +62,100 @@ const ROUTING_SYSTEM = [
 export class Router {
   readonly #gateway: ModelGateway;
   readonly #modules: ModuleRegistry;
+  readonly #traces: TraceRecorder | undefined;
 
-  constructor(gateway: ModelGateway, modules: ModuleRegistry) {
+  constructor(gateway: ModelGateway, modules: ModuleRegistry, traces?: TraceRecorder) {
     this.#gateway = gateway;
     this.#modules = modules;
+    this.#traces = traces;
   }
 
   async route(input: RouteInput): Promise<RouteDecision> {
+    // A trace step belongs to a tenant, so a call made without attribution is
+    // not traced rather than traced under a placeholder.
+    const trace = new TurnTrace(input.attribution?.tenantId ? this.#traces : undefined, {
+      tenantId: input.attribution?.tenantId ?? '',
+      sessionId: input.attribution?.sessionId ?? null,
+      ...(input.traceId === undefined ? {} : { traceId: input.traceId }),
+    });
+
     const modules = this.#modules.list();
     if (modules.length === 0) {
+      await this.#traceFailure(trace, 'no modules registered to route to');
       throw new RouterError('no modules registered to route to');
     }
 
     // One module needs no model call — a routing decision with a single
     // option is not a decision, and it is the common early case.
     if (modules.length === 1) {
-      return { moduleId: modules[0]!.id, confidence: 1, reason: 'only module registered' };
+      const decision = {
+        moduleId: modules[0]!.id,
+        confidence: 1,
+        reason: 'only module registered',
+        traceId: trace.traceId,
+      };
+      await this.#traceDecision(trace, decision, { modelCall: false });
+      return decision;
     }
 
     const catalogue = modules.map((module) => `- ${module.id}: ${module.description}`).join('\n');
 
-    const response = await this.#gateway.complete({
-      task: 'routing',
-      system: ROUTING_SYSTEM,
-      messages: [userMessage(`Modules:\n${catalogue}\n\nUser message:\n${input.text}`)],
-      ...(input.attribution ? { attribution: input.attribution } : {}),
-    });
+    let decision: RouteDecision;
+    try {
+      const response = await this.#gateway.complete({
+        task: 'routing',
+        system: ROUTING_SYSTEM,
+        messages: [userMessage(`Modules:\n${catalogue}\n\nUser message:\n${input.text}`)],
+        ...(input.attribution ? { attribution: input.attribution } : {}),
+      });
 
-    const decision = this.#parse(responseText(response));
+      const parsed = this.#parse(responseText(response));
 
-    if (!this.#modules.has(decision.moduleId)) {
-      // The model named something that is not on the menu. That is a routing
-      // failure, not a module to invent — surface it rather than guess.
-      throw new RouterError(
-        `router chose unknown module "${decision.moduleId}"; valid ids: ${modules
-          .map((module) => module.id)
-          .join(', ')}`,
-      );
+      if (!this.#modules.has(parsed.moduleId)) {
+        // The model named something that is not on the menu. That is a routing
+        // failure, not a module to invent — surface it rather than guess.
+        throw new RouterError(
+          `router chose unknown module "${parsed.moduleId}"; valid ids: ${modules
+            .map((module) => module.id)
+            .join(', ')}`,
+        );
+      }
+
+      decision = { ...parsed, traceId: trace.traceId };
+    } catch (error) {
+      // A router that refuses to decide is the failure worth seeing: without
+      // this step the trace would show a turn that simply never began.
+      await this.#traceFailure(trace, error instanceof Error ? error.message : String(error));
+      throw error;
     }
 
+    await this.#traceDecision(trace, decision, { modelCall: true });
     return decision;
   }
 
-  #parse(text: string): RouteDecision {
+  #traceDecision(
+    trace: TurnTrace,
+    decision: RouteDecision,
+    context: { modelCall: boolean },
+  ): Promise<void> {
+    return trace.step({
+      kind: 'route',
+      label: decision.moduleId,
+      succeeded: true,
+      detail: {
+        confidence: decision.confidence,
+        reason: decision.reason,
+        modelCall: context.modelCall,
+      },
+    });
+  }
+
+  #traceFailure(trace: TurnTrace, message: string): Promise<void> {
+    return trace.step({ kind: 'route', succeeded: false, errorMessage: message });
+  }
+
+  /** The model's half of a decision; the trace id is the router's to add. */
+  #parse(text: string): Omit<RouteDecision, 'traceId'> {
     const json = extractJsonObject(text);
     if (json === null) {
       throw new RouterError(`router returned no JSON object: ${truncate(text)}`);

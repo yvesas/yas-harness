@@ -8,6 +8,7 @@ import { ModuleRegistry } from '../../src/modules/module.js';
 import type { ScriptedTurn } from '../../src/models/scripted-gateway.js';
 import { ScriptedGateway } from '../../src/models/scripted-gateway.js';
 import { Router, RouterError } from '../../src/router/router.js';
+import { InMemoryTraceRecorder } from '../../src/telemetry/trace.js';
 
 function modules(...ids: string[]): ModuleRegistry {
   const registry = new ModuleRegistry();
@@ -33,7 +34,7 @@ describe('Router', () => {
 
     const decision = await router.route({ text: 'anything' });
 
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       moduleId: 'only',
       confidence: 1,
       reason: 'only module registered',
@@ -62,7 +63,7 @@ describe('Router', () => {
 
     const decision = await router.route({ text: 'move my 3pm' });
 
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       moduleId: 'calendar',
       confidence: 0.8,
       reason: 'about a meeting',
@@ -159,5 +160,79 @@ describe('Router', () => {
     await router.route({ text: 'q', attribution: { tenantId: 't1', sessionId: 's1' } });
 
     expect(gateway.requests[0]?.attribution).toEqual({ tenantId: 't1', sessionId: 's1' });
+  });
+
+  describe('tracing', () => {
+    const attribution = { tenantId: 't1', sessionId: 's1' };
+
+    it('records the decision it made and why', async () => {
+      const traces = new InMemoryTraceRecorder();
+      const router = new Router(
+        new ScriptedGateway([replies('{"moduleId":"finance","confidence":0.9,"reason":"money"}')]),
+        modules('finance', 'calendar'),
+        traces,
+      );
+
+      const decision = await router.route({ text: 'what did I spend?', attribution });
+
+      expect(traces.trace(decision.traceId)).toHaveLength(1);
+      expect(traces.trace(decision.traceId)[0]).toMatchObject({
+        kind: 'route',
+        label: 'finance',
+        succeeded: true,
+        detail: { confidence: 0.9, reason: 'money', modelCall: true },
+      });
+    });
+
+    it('records a short-circuited decision too, marked as taking no model call', async () => {
+      const traces = new InMemoryTraceRecorder();
+      const router = new Router(new ScriptedGateway([]), modules('only'), traces);
+
+      const decision = await router.route({ text: 'anything', attribution });
+
+      expect(traces.trace(decision.traceId)[0]).toMatchObject({
+        label: 'only',
+        detail: { modelCall: false },
+      });
+    });
+
+    it('records a router that refused to decide', async () => {
+      const traces = new InMemoryTraceRecorder();
+      const router = new Router(
+        new ScriptedGateway([replies('{"moduleId":"nope","confidence":1,"reason":"x"}')]),
+        modules('finance', 'calendar'),
+        traces,
+      );
+
+      await expect(router.route({ text: 'q', attribution })).rejects.toThrowError(/unknown module/);
+
+      // Without this step the trace would show a turn that simply never began.
+      expect(traces.steps[0]).toMatchObject({ kind: 'route', succeeded: false });
+      expect(traces.steps[0]?.errorMessage).toContain('unknown module');
+    });
+
+    it('hands back a trace id the caller can carry into the turn', async () => {
+      const traces = new InMemoryTraceRecorder();
+      const router = new Router(new ScriptedGateway([]), modules('only'), traces);
+
+      const decision = await router.route({
+        text: 'anything',
+        attribution,
+        traceId: '44444444-4444-4444-8444-444444444444',
+      });
+
+      expect(decision.traceId).toBe('44444444-4444-4444-8444-444444444444');
+    });
+
+    it('does not trace a call with no tenant to attribute it to', async () => {
+      const traces = new InMemoryTraceRecorder();
+      const router = new Router(new ScriptedGateway([]), modules('only'), traces);
+
+      await router.route({ text: 'anything' });
+
+      // A trace step belongs to a tenant; a placeholder would be a lie in a
+      // table whose whole value is being able to trust it.
+      expect(traces.steps).toHaveLength(0);
+    });
   });
 });

@@ -10,7 +10,7 @@ npm install          # also enables the Git hooks (core.hooksPath = .githooks)
 cp .env.example .env
 docker compose up -d # PostgreSQL + pgvector
 npm run migrate up
-npm run check        # lint + typecheck + tests
+npm run check        # what CI runs: lint, format, licences, boundaries, types, tests
 ```
 
 If `npm run check` passes on a clean clone, your environment is fine.

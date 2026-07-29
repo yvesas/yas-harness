@@ -111,6 +111,24 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
     );
   });
 
+  it('records a module asking another for context', async () => {
+    await recorder.record(
+      step({
+        kind: 'context_request',
+        label: 'planner → ledger',
+        succeeded: false,
+        detail: { requester: 'planner', owner: 'ledger', granted: false, reason: 'no' },
+      }),
+    );
+
+    // The only step where data crosses a module boundary, so it lives in the
+    // same trace as the turn that caused it rather than a table of its own.
+    expect((await recorder.trace(tenantA, TRACE))[0]).toMatchObject({
+      kind: 'context_request',
+      succeeded: false,
+    });
+  });
+
   it('records a step outside any conversation', async () => {
     // A standalone routing call has no session to belong to.
     await recorder.record(step({ sessionId: null, kind: 'route', label: 'finance' }));

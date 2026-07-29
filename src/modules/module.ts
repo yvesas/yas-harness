@@ -12,6 +12,7 @@
  */
 
 import type { ToolRegistry } from '../core/tool.js';
+import type { ContextDiscloser } from '../pools/context.js';
 
 export interface ModuleDefinition {
   /** Stable id used in routing decisions and traces. */
@@ -24,6 +25,15 @@ export interface ModuleDefinition {
   readonly description: string;
   /** The tools this module contributes to an agent that is routed to it. */
   readonly tools: ToolRegistry;
+  /**
+   * How this module answers another module asking for its context.
+   *
+   * Optional, and its absence is a decision: a module that does not declare one
+   * shares nothing. Sharing is opt-in per module and decided per request — the
+   * owner sees the purpose and may reveal a summary instead of the rows, or
+   * refuse with a reason. See `src/pools/context.ts`.
+   */
+  readonly disclose?: ContextDiscloser;
 }
 
 /** Module ids the router can name: lowercase, no spaces. */

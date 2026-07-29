@@ -50,7 +50,8 @@ Layout, one responsibility per folder (each has a README stating its boundary):
 - Validate every external input with Zod. Typed errors; never swallow an exception.
 - Declarative configuration lives in `config/`, versioned in Git. Secrets never do.
 - Structured JSON logs, no PII.
-- Run `npm run check` (lint + typecheck + test) before committing.
+- Run `npm run check` before committing — it mirrors CI: lint, format,
+  license headers, boundaries, typecheck, tests.
 
 ## Commit and PR rules
 

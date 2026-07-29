@@ -9,8 +9,13 @@
  * answered.
  */
 
+import type { ContextCompressor } from '../compression/context-compressor.js';
 import type { SecretRedactor } from '../redaction/secret-redactor.js';
-import type { ModelUsageRecord, UsageRecorder } from '../telemetry/model-usage.js';
+import type {
+  CompressionUsage,
+  ModelUsageRecord,
+  UsageRecorder,
+} from '../telemetry/model-usage.js';
 import { computeCostUsd } from '../telemetry/model-usage.js';
 
 import type { ModelGateway, ModelRequest, ModelResponse, TaskKind } from './model-gateway.js';
@@ -23,6 +28,12 @@ export interface RoutedGatewayOptions {
   readonly config: ModelConfig;
   readonly providers: readonly ModelProvider[];
   readonly recorder?: UsageRecorder;
+  /**
+   * Shrinks a request's context before it goes out (E5.5). Omitted by default:
+   * compression enters the data path only once a product's eval says its
+   * answers do not degrade, and the harness ships it off.
+   */
+  readonly compressor?: ContextCompressor;
   /** Attributed to every usage record; a product supplies the real tenant. */
   readonly tenantId?: string;
   /** Scrubs secrets from the one thing this class logs; wired in production. */
@@ -38,6 +49,7 @@ export class RoutedGateway implements ModelGateway {
   readonly #config: ModelConfig;
   readonly #providers: Map<string, ModelProvider>;
   readonly #recorder: UsageRecorder | undefined;
+  readonly #compressor: ContextCompressor | undefined;
   readonly #tenantId: string;
   readonly #redactor: SecretRedactor;
   readonly #sleep: (ms: number) => Promise<void>;
@@ -46,6 +58,7 @@ export class RoutedGateway implements ModelGateway {
     this.#config = options.config;
     this.#providers = new Map(options.providers.map((provider) => [provider.name, provider]));
     this.#recorder = options.recorder;
+    this.#compressor = options.compressor;
     this.#tenantId = options.tenantId ?? UNATTRIBUTED_TENANT;
     // No redactor in tests means log as-is; production always wires the real one.
     this.#redactor = options.redactor ?? { redact: (text) => text };
@@ -66,7 +79,13 @@ export class RoutedGateway implements ModelGateway {
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
-    const candidates = candidatesFor(this.#config, request.task);
+    // Compressed once, before the chain rather than inside it: every candidate
+    // is sent the same context, and the pipeline is deterministic, so running
+    // it per attempt would only repeat work and muddle what a retry cost.
+    const { request: outgoing, compression } = this.#compress(request);
+    const recorded = compression ? { compression } : {};
+
+    const candidates = candidatesFor(this.#config, outgoing.task);
     let attempts = 0;
     let lastError: ModelGatewayError | undefined;
 
@@ -76,24 +95,26 @@ export class RoutedGateway implements ModelGateway {
         const startedAt = performance.now();
 
         try {
-          const response = await this.#invoke(candidate, request);
-          await this.#record(candidate, request, {
+          const response = await this.#invoke(candidate, outgoing);
+          await this.#record(candidate, outgoing, {
             usage: response.usage,
             latencyMs: response.latencyMs,
             attempts,
             succeeded: true,
+            ...recorded,
           });
           return response;
         } catch (error) {
-          const failure = asGatewayError(error, candidate, request.task);
+          const failure = asGatewayError(error, candidate, outgoing.task);
           lastError = failure;
 
-          await this.#record(candidate, request, {
+          await this.#record(candidate, outgoing, {
             usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
             latencyMs: Math.round(performance.now() - startedAt),
             attempts,
             succeeded: false,
             errorMessage: failure.message,
+            ...recorded,
           });
 
           // A rejected request fails the same way however often it is sent;
@@ -110,10 +131,48 @@ export class RoutedGateway implements ModelGateway {
     }
 
     throw new ModelGatewayError(
-      `every model for task "${request.task}" failed after ${attempts} attempt(s): ${lastError?.message ?? 'no candidates'}`,
-      { provider: 'routed', task: request.task, retryable: true },
+      `every model for task "${outgoing.task}" failed after ${attempts} attempt(s): ${lastError?.message ?? 'no candidates'}`,
+      { provider: 'routed', task: outgoing.task, retryable: true },
       lastError ? { cause: lastError } : {},
     );
+  }
+
+  /**
+   * Shrink the outgoing context, or send it untouched.
+   *
+   * The pipeline's own floor is "no change, never a wrong value"; an engine that
+   * throws outright is held to the same floor here. Losing a compression saving
+   * is a cost problem, and failing the user's turn over it would be worse.
+   */
+  #compress(request: ModelRequest): {
+    request: ModelRequest;
+    compression?: CompressionUsage;
+  } {
+    if (!this.#compressor) {
+      return { request };
+    }
+
+    try {
+      const { request: compressed, report } = this.#compressor.compress(request);
+      // A declared cacheable prefix is excluded from compression (E5.7) but was
+      // still sent, so the recorded totals describe the whole request — not
+      // just the part engines were allowed to touch, which would read as a
+      // larger saving than the call actually made.
+      const prefixTokens = report.cachePrefix?.tokens ?? 0;
+      return {
+        request: compressed,
+        compression: {
+          beforeTokens: report.beforeTokens + prefixTokens,
+          afterTokens: report.afterTokens + prefixTokens,
+        },
+      };
+    } catch (error) {
+      console.warn('context compression failed; sending the request uncompressed', {
+        task: request.task,
+        error: this.#redactor.redact(error instanceof Error ? error.message : String(error)),
+      });
+      return { request };
+    }
   }
 
   async #invoke(candidate: ResolvedCandidate, request: ModelRequest): Promise<ModelResponse> {
@@ -130,7 +189,7 @@ export class RoutedGateway implements ModelGateway {
     request: ModelRequest,
     outcome: Pick<
       ModelUsageRecord,
-      'usage' | 'latencyMs' | 'attempts' | 'succeeded' | 'errorMessage'
+      'usage' | 'latencyMs' | 'attempts' | 'succeeded' | 'errorMessage' | 'compression'
     >,
   ): Promise<void> {
     if (!this.#recorder) {

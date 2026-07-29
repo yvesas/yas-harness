@@ -3,6 +3,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import type { ContextCompressor } from '../../src/compression/context-compressor.js';
+import { compressorFor } from '../../src/compression/profiles.js';
 import type { ModelRequest, ModelResponse } from '../../src/models/model-gateway.js';
 import { ModelGatewayError, userMessage } from '../../src/models/model-gateway.js';
 import type { ModelProvider, ProviderCall } from '../../src/models/model-provider.js';
@@ -265,6 +267,130 @@ describe('RoutedGateway', () => {
       } finally {
         warn.mockRestore();
       }
+    });
+  });
+
+  describe('context compression', () => {
+    /** Trailing whitespace and blank runs: what the whitespace engine removes. */
+    const padded = request({
+      messages: [userMessage('hello   \n\n\n\nworld')],
+    });
+
+    function withCompressor(compressor: ContextCompressor) {
+      const recorder = new InMemoryUsageRecorder();
+      const provider = new FakeProvider('groq', () => answer('ok'));
+      const gateway = new RoutedGateway({
+        config,
+        providers: [provider, new FakeProvider('anthropic', () => answer('unused'))],
+        recorder,
+        compressor,
+        sleep: () => Promise.resolve(),
+      });
+      return { gateway, recorder, provider };
+    }
+
+    it('sends the compressed request and records what it saved', async () => {
+      const { gateway, recorder, provider } = withCompressor(compressorFor('light'));
+
+      await gateway.complete(padded);
+
+      const sent = provider.calls[0]!.request.messages[0]!.content[0]!;
+      expect(sent).toMatchObject({ type: 'text', text: 'hello\n\nworld' });
+      const { compression } = recorder.records[0]!;
+      expect(compression!.afterTokens).toBeLessThan(compression!.beforeTokens);
+    });
+
+    it('leaves the request and the record alone when no compressor is wired', async () => {
+      const { gateway, recorder } = build([
+        new FakeProvider('groq', () => answer('ok')),
+        new FakeProvider('anthropic', () => answer('unused')),
+      ]);
+
+      await gateway.complete(padded);
+
+      // Null in the database means "compression was never wired", which is a
+      // different fact from "it ran and saved nothing".
+      expect(recorder.records[0]!.compression).toBeUndefined();
+    });
+
+    it('compresses once, not per attempt in the fallback chain', async () => {
+      const compressor = compressorFor('light');
+      const calls = { count: 0 };
+      const counting: ContextCompressor = {
+        compress: (input) => {
+          calls.count += 1;
+          return compressor.compress(input);
+        },
+      };
+      const gateway = new RoutedGateway({
+        config,
+        providers: [
+          new FakeProvider('groq', () => retryable('rate limited', 'groq')),
+          new FakeProvider('anthropic', () => answer('recovered')),
+        ],
+        recorder: new InMemoryUsageRecorder(),
+        compressor: counting,
+        sleep: () => Promise.resolve(),
+      });
+
+      await gateway.complete(request({ task: 'simple' }));
+
+      expect(calls.count).toBe(1);
+    });
+
+    it('sends the request uncompressed rather than losing the turn to a broken engine', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const { gateway, recorder, provider } = withCompressor({
+          compress: () => {
+            throw new Error('engine exploded');
+          },
+        });
+
+        const response = await gateway.complete(padded);
+
+        expect(response.model).toBe('ok');
+        // Untouched: the floor for a compression fault is "no change".
+        expect(provider.calls[0]!.request.messages[0]!.content[0]).toMatchObject({
+          text: 'hello   \n\n\n\nworld',
+        });
+        expect(recorder.records[0]!.compression).toBeUndefined();
+        expect(warn).toHaveBeenCalledWith(
+          'context compression failed; sending the request uncompressed',
+          expect.objectContaining({ task: 'simple' }),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('counts the untouched cacheable prefix in what the call sent', async () => {
+      // Enough padding on both sides that the difference is whole tokens, not
+      // a rounding artefact: a few trailing spaces are worth less than a token.
+      const messages = [
+        userMessage(`stable handbook${'\n'.repeat(40)}text`),
+        userMessage(`tail${'\n'.repeat(40)}end`),
+      ];
+      const withPrefix = withCompressor(compressorFor('light'));
+      const withoutPrefix = withCompressor(compressorFor('light'));
+
+      await withPrefix.gateway.complete(request({ messages, cachePrefix: { stableMessages: 1 } }));
+      await withoutPrefix.gateway.complete(request({ messages }));
+
+      const declared = withPrefix.recorder.records[0]!.compression!;
+      const undeclared = withoutPrefix.recorder.records[0]!.compression!;
+
+      // Both calls sent the same request, so both report the same starting
+      // size — the prefix is excluded from compression, not from the total.
+      // Leaving it out would inflate the saving the call actually made. The
+      // two are not bit-identical: with a prefix declared the total is two
+      // regions counted separately, and a tokenizer splits differently across
+      // a boundary it no longer sees. A token of drift, well inside the
+      // counter's own approximation, is the price of the split.
+      expect(Math.abs(declared.beforeTokens - undeclared.beforeTokens)).toBeLessThanOrEqual(2);
+      // And declaring it costs real saving: the prefix is left alone.
+      expect(declared.afterTokens).toBeGreaterThan(undeclared.afterTokens);
+      expect(declared.afterTokens).toBeLessThan(declared.beforeTokens);
     });
   });
 });

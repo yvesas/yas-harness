@@ -97,6 +97,35 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **Compression is wired into the gateway, but a product turns it on (E5.5).**
+  `RoutedGateway` takes an optional `ContextCompressor` and, when given one,
+  compresses **once before the fallback chain** — every candidate then gets the
+  same context, and a retry does not re-run a deterministic pipeline or muddle
+  what it cost. The saving lands in `model_usage` as
+  `compression_before_tokens` / `compression_after_tokens`, kept apart from
+  `input_tokens`: those are the provider's exact numbers, these are the
+  harness's `TokenCounter` over rendered text. **Null means no compressor was
+  wired**, which is a different fact from "ran and saved nothing" (an equal
+  pair), so the pair is nullable together and constrained to be all-or-nothing.
+  There is deliberately **no `after <= before` constraint** — an engine applies
+  on a *character* reduction, and a tokenizer can turn fewer characters into
+  more tokens; that belongs in the data, not in a write that fails at 3am. A
+  compressor that throws is caught: the request goes out uncompressed, matching
+  the pipeline's own floor of "no change" — losing a saving is a cost problem,
+  losing the user's turn would be worse. Default is no compressor.
+- **The release gate is a with/without eval, not a size threshold (E5.5).**
+  The sensitivity gate proves a value was not corrupted; it cannot prove the
+  model still *used* it. So `src/compression/eval.ts` asks each case twice —
+  uncompressed and compressed — and counts the one outcome that should block a
+  release: a case the baseline got right and the compressed run got wrong. A
+  case **both** runs fail is `inconclusive`, not a regression: that is a broken
+  case or prompt, and charging it to compression would let a bad case set veto a
+  good engine. A compressed call that throws *is* a regression — a request the
+  provider rejects is a way compression breaks an answer. Cases assert exact
+  values a correct answer must carry (an id, a total, a date), never phrasing,
+  because models vary between runs and an assertion on wording would report that
+  variance as a regression. Mirrors the router's eval: mechanism here, data in
+  the product.
 - **The cacheable prefix is never compressed — not even losslessly (E5.7).**
   A request may declare a `CachePrefix` (`system`, `tools`, and the first N
   messages), which does two things: the Anthropic adapter puts a single cache

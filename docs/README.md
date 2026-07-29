@@ -31,6 +31,7 @@ Two kinds, kept apart on purpose:
 | [0007](./adr/0007-oauth-and-transparent-refresh.md) | OAuth as mechanics, with transparent token refresh |
 | [0008](./adr/0008-resource-cache.md) | A read-through cache of connected resources, refreshed by polling or webhook |
 | [0009](./adr/0009-mcp-connectors.md) | Expose connectors over MCP as mechanics, read-only by default |
+| [0010](./adr/0010-context-compression.md) | Context compression: gated, measured in tokens, and off until an eval says otherwise |
 
 ## Writing a new ADR
 

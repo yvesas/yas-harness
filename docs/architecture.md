@@ -74,7 +74,8 @@ without a network or an API bill.
 | `src/connections/` | External connectors, connections and the credential vault |
 | `src/connections/connectors/` | Concrete connectors (Confluence, Jira, GitHub, Google Drive, Slack, Notion, Google Calendar, Cal.com, Calendly, Microsoft Teams) and shared Atlassian plumbing |
 | `src/mcp/` | MCP server exposing the connectors as tools (mechanics, no transport) |
-| `src/compression/` | Context compression: a gated engine pipeline (mechanism; not on the gateway path yet) |
+| `src/compression/` | Context compression: a gated engine pipeline, plus the eval that gates its release |
+| `src/redaction/` | Secret redaction on the persistence and log paths (always on) |
 | `src/approval/` | Human approval queue |
 
 ## The path of a message
@@ -142,7 +143,18 @@ in-memory double could agree with a wrong constraint.
   the data path — every prompt and answer flowing through infrastructure we do
   not control — which is what the LGPD posture rules out. See
   [ADR 0002](./adr/0002-own-model-gateway.md).
+- Secrets are scrubbed before anything durable. A redactor wraps every free-text
+  path to the database and the one log site, so a credential that reaches the
+  harness in a message, a tool input or a provider error does not land in a
+  table or a log in the clear. It is unconditional by design: unlike a
+  compression engine, it can never be skipped by a gate.
 - Inbound channel messages are treated as untrusted input.
+- Context sent to a model can be compressed, but never silently. Engines run
+  behind a sensitivity gate that discards any output which would change a
+  protected value, savings are measured in real tokens rather than assumed, the
+  provider's cacheable prefix is left byte-identical, and a profile reaches a
+  product's data path only after an eval shows no answer got worse. Off by
+  default. See [ADR 0010](./adr/0010-context-compression.md).
 - Destructive actions can require human approval: a gated tool pauses the turn
   until a human decides, and fails closed if no approval queue is wired.
 

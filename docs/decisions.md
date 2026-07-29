@@ -66,10 +66,9 @@ ADR instead.
   engines are lossless: `whitespace` (trailing-space and blank-line trim only)
   and `json-table` (a homogeneous JSON array of objects → a compact
   `{columns, rows}` table — drops repeated keys, keeps every value; if
-  re-serialising would reformat a number, the gate discards it). It is **not
-  wired into the gateway** yet — compression enters the data path only once an
-  eval confirms answers don't degrade (E5.5). The strategy ADR is E5.8. Gate
-  patterns are linear (no ReDoS).
+  re-serialising would reformat a number, the gate discards it). Gate patterns
+  are linear (no ReDoS). The whole strategy is
+  [ADR 0010](./adr/0010-context-compression.md).
 - **Compression savings are measured in real tokens, through a port (E5.4).**
   Tokens — not characters — are what a model bills, and no single tokenizer is
   exact for Claude, GPT, Gemini and Llama at once (each keeps its own vocabulary;

@@ -56,4 +56,6 @@ subscription product sends fewer tokens without sending a worse prompt. It is a
   it, because the decision is the trade between the two. A case both runs fail
   is counted apart — that is a bad case, not a bad engine.
 
-See `docs/decisions.md`; the strategy ADR is E5.8, a later slice.
+The strategy — what compresses, what never does, how it is measured, and why it
+is off until an eval says otherwise — is [ADR 0010](../../docs/adr/0010-context-compression.md).
+Smaller choices are in `docs/decisions.md`.

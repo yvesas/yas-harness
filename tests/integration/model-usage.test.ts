@@ -126,6 +126,45 @@ describe.skipIf(!DATABASE_URL)('PostgresUsageRecorder', () => {
     await expect(recorder.record(usage({ costUsd: -1 }))).rejects.toThrow(/model_usage_cost_check/);
   });
 
+  it('records what compression saved next to what the call cost', async () => {
+    await recorder.record(usage({ compression: { beforeTokens: 4200, afterTokens: 3100 } }));
+
+    const { rows } = await pool.query<{
+      compression_before_tokens: number;
+      compression_after_tokens: number;
+    }>(
+      `SELECT compression_before_tokens, compression_after_tokens
+         FROM model_usage WHERE tenant_id = $1`,
+      [tenantA],
+    );
+    expect(rows[0]).toEqual({ compression_before_tokens: 4200, compression_after_tokens: 3100 });
+  });
+
+  it('leaves both compression columns null when no compressor was wired', async () => {
+    await recorder.record(usage());
+
+    const { rows } = await pool.query<{ compression_before_tokens: number | null }>(
+      `SELECT compression_before_tokens FROM model_usage WHERE tenant_id = $1`,
+      [tenantA],
+    );
+    // Null is "compression was never wired", a different fact from "it ran and
+    // saved nothing" — which is an equal pair, not a null one.
+    expect(rows[0]?.compression_before_tokens).toBeNull();
+  });
+
+  it('refuses a half-recorded compression pair', async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO model_usage (
+           tenant_id, task, model_reference, provider, model, tier,
+           input_tokens, output_tokens, cached_input_tokens, cost_usd,
+           latency_ms, attempts, succeeded, compression_before_tokens
+         ) VALUES ($1, 'simple', 'x', 'y', 'z', 'cheap', 0, 0, 0, 0, 1, 1, true, 100)`,
+        [tenantA],
+      ),
+    ).rejects.toThrow(/model_usage_compression_pair_check/);
+  });
+
   it('keeps the billing record when the conversation is deleted', async () => {
     await recorder.record(usage({ costUsd: 3 }));
 

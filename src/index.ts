@@ -33,6 +33,8 @@ import {
   PostgresCredentialStore,
   PostgresTenantKeyStore,
 } from './connections/postgres-connection-store.js';
+import { compressorFor } from './compression/profiles.js';
+import type { CompressionProfile } from './compression/profiles.js';
 import { Agent } from './core/agent.js';
 import { loadPersona } from './core/persona.js';
 import { ToolRegistry } from './core/tool.js';
@@ -108,6 +110,13 @@ export interface HarnessOptions {
   readonly masterEncryptionKey?: string;
   /** Products register their connectors here; the connection manager uses them. */
   readonly connectors?: ConnectorRegistry;
+  /**
+   * How hard to compress context before it reaches a model. Defaults to
+   * `none`, and `none` wires no compressor at all rather than an identity one —
+   * so a null saving in `model_usage` keeps meaning "compression was never on".
+   * Turn this up only once `evaluateCompression` says answers hold (E5.5).
+   */
+  readonly compressionProfile?: CompressionProfile;
 }
 
 /**
@@ -139,11 +148,13 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   if (routedProviders.has('anthropic')) providers.push(new AnthropicProvider());
   if (routedProviders.has('groq')) providers.push(new GroqProvider());
 
+  const compressionProfile = options.compressionProfile ?? 'none';
   const gateway = new RoutedGateway({
     config: modelConfig,
     providers,
     recorder: new RedactingUsageRecorder(new PostgresUsageRecorder(pool), redactor),
     redactor,
+    ...(compressionProfile === 'none' ? {} : { compressor: compressorFor(compressionProfile) }),
   });
   const tools = options.tools ?? new ToolRegistry();
   const modules = options.modules ?? new ModuleRegistry();
@@ -281,11 +292,25 @@ export { CompressionPipeline } from './compression/compression-pipeline.js';
 export { CompressionError } from './compression/context-compressor.js';
 export type {
   ContextCompressor,
+  CachePrefixReport,
   CompressionEngine,
   CompressionResult,
   CompressionReport,
   EngineReport,
 } from './compression/context-compressor.js';
+export {
+  compressionCaseSchema,
+  compressionCaseSetSchema,
+  evaluateCompression,
+  passesGate,
+  regressions,
+  toModelRequest,
+} from './compression/eval.js';
+export type {
+  CompressionCase,
+  CompressionCaseOutcome,
+  CompressionEvalReport,
+} from './compression/eval.js';
 export { RegexSensitivityGuard } from './compression/sensitivity-gate.js';
 export type { SensitivityGuard } from './compression/sensitivity-gate.js';
 export { WhitespaceEngine } from './compression/engines/whitespace-engine.js';
@@ -360,7 +385,7 @@ export { ScriptedGateway, callsTool, says } from './models/scripted-gateway.js';
 export { loadModelConfig, parseModelConfig } from './models/routing.js';
 export type { ModelConfig, ModelEntry, ModelTier } from './models/routing.js';
 export { InMemoryUsageRecorder, computeCostUsd } from './telemetry/model-usage.js';
-export type { ModelUsageRecord, UsageRecorder } from './telemetry/model-usage.js';
+export type { CompressionUsage, ModelUsageRecord, UsageRecorder } from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 export { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';

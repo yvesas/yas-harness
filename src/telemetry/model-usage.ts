@@ -11,6 +11,27 @@
 import type { TaskKind, TokenUsage } from '../models/model-gateway.js';
 import type { ModelTier, Price } from '../models/routing.js';
 
+/**
+ * What context compression saved on this call, as the harness measured it.
+ *
+ * Deliberately kept apart from `usage`: those are the provider's own numbers
+ * and are exact, while these come from the harness's `TokenCounter` over the
+ * request's rendered text — an approximation for any provider whose tokenizer
+ * is not the counter's, and blind to whatever framing the provider adds. The
+ * point of recording both is to see the saving *next to* the bill it moved,
+ * not to pretend they are measured the same way.
+ *
+ * When a request declares a cacheable prefix the totals cover it too, even
+ * though it was never compressed — it was still sent, and leaving it out would
+ * read as a larger saving than the call made. That total is two regions counted
+ * separately, so it can drift a token from counting the request whole; the
+ * counter's own approximation is the larger error by far.
+ */
+export interface CompressionUsage {
+  readonly beforeTokens: number;
+  readonly afterTokens: number;
+}
+
 /** One model call, as recorded. */
 export interface ModelUsageRecord {
   readonly tenantId: string;
@@ -28,6 +49,8 @@ export interface ModelUsageRecord {
   readonly attempts: number;
   readonly succeeded: boolean;
   readonly errorMessage?: string;
+  /** Absent when no compressor is wired, which is the default posture. */
+  readonly compression?: CompressionUsage;
 }
 
 /**

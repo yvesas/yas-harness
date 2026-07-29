@@ -6,11 +6,12 @@ subscription product sends fewer tokens without sending a worse prompt. It is a
 
 ## Boundary
 
-- **Mechanism, not policy on the hot path.** This is a `ContextCompressor` port
-  (`compress(request) → {request, report}`). The report now carries each engine's
+- **Mechanism, opt-in on the hot path.** This is a `ContextCompressor` port
+  (`compress(request) → {request, report}`). The report carries each engine's
   **real token saving**, measured through a `TokenCounter` (E5.4), not a character
-  proxy. It is still **not** wired into the model gateway — compression goes into
-  the data path only once an eval confirms answers don't degrade (E5.5).
+  proxy. The gateway now accepts a compressor and records the saving in
+  `model_usage` (E5.5) — but takes none by default. A profile enters a product's
+  data path only after `eval.ts` says its answers don't degrade.
 - **Safe by construction.** Every engine's output is checked by the
   `SensitivityGuard`: an exact value — a price, a date, an id, a URL, an email,
   anything in code or a fenced block — that comes out **wrong** causes the
@@ -49,5 +50,10 @@ subscription product sends fewer tokens without sending a worse prompt. It is a
 - `profiles.ts` — named engine subsets. `light`/`medium` are lossless only;
   `aggressive` adds the lossy `tool-result` engine. `none` is the off-by-default
   identity.
+- `eval.ts` — the release gate. Runs each case twice, uncompressed and
+  compressed, and counts the only outcome that should block a release: a case
+  the baseline got right and compression got wrong. Savings are reported next to
+  it, because the decision is the trade between the two. A case both runs fail
+  is counted apart — that is a bad case, not a bad engine.
 
 See `docs/decisions.md`; the strategy ADR is E5.8, a later slice.

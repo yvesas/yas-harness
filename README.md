@@ -128,6 +128,12 @@ input. Destructive actions require human approval.
 To report a vulnerability, read [SECURITY.md](./SECURITY.md) — please do not
 open a public issue.
 
+## Releases
+
+[`CHANGELOG.md`](./CHANGELOG.md) records what changed and what an upgrade
+asks of you. Nothing is tagged yet: until `1.0.0` the port interfaces should be
+treated as unstable.
+
 ## Contributing
 
 Contributions are welcome. Start with [CONTRIBUTING.md](./CONTRIBUTING.md), and

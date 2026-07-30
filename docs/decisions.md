@@ -96,6 +96,14 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **`createHarness` accepts a gateway, so the composition can be tested (F7.1).**
+  The providers are constructed eagerly and each one needs its own key, so
+  building a harness without a provider key was impossible — which meant the one
+  function every product calls first had never run, in any test, and a product
+  could never test its own wiring either. `HarnessOptions.gateway` replaces the
+  routed gateway outright, providers included. The consequence is deliberate and
+  worth knowing: the usage recorder lives *inside* `RoutedGateway`, so a
+  supplied gateway takes over its own cost accounting.
 - **Every external call in the connections layer has a deadline, and the caller
   sets it (F7.0).** Ten connectors were calling `fetch` with no `AbortSignal`: a
   source that accepts the connection and then goes quiet would hold a user's

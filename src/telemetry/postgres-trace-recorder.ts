@@ -11,9 +11,17 @@
 
 import type { Pool } from 'pg';
 
-import type { TraceRecorder, TraceStep } from './trace.js';
+import type {
+  RecentTracesQuery,
+  TraceReader,
+  TraceRecorder,
+  TraceStep,
+  TraceSummary,
+} from './trace.js';
 
-export class PostgresTraceRecorder implements TraceRecorder {
+const DEFAULT_RECENT_LIMIT = 20;
+
+export class PostgresTraceRecorder implements TraceRecorder, TraceReader {
   constructor(private readonly pool: Pool) {}
 
   async record(step: TraceStep): Promise<void> {
@@ -49,6 +57,49 @@ export class PostgresTraceRecorder implements TraceRecorder {
     );
     return rows.map(toStep);
   }
+
+  /**
+   * The most recent turns, newest first — one row per turn.
+   *
+   * Grouped in the database rather than by reading every step and folding in
+   * memory: a busy tenant's steps are the one thing here that grows without
+   * bound, and a list of turns should not have to load them.
+   */
+  async recent(tenantId: string, query: RecentTracesQuery = {}): Promise<TraceSummary[]> {
+    const { rows } = await this.pool.query<SummaryRow>(
+      `SELECT trace_id,
+              min(session_id::text)              AS session_id,
+              min(created_at)                    AS started_at,
+              count(*)::int                      AS steps,
+              max(label) FILTER (WHERE kind = 'reply') AS ended_as,
+              bool_or(NOT succeeded)             AS failed
+         FROM traces
+        WHERE tenant_id = $1
+          AND ($2::uuid IS NULL OR session_id = $2)
+        GROUP BY trace_id
+        ORDER BY min(created_at) DESC
+        LIMIT $3`,
+      [tenantId, query.sessionId ?? null, query.limit ?? DEFAULT_RECENT_LIMIT],
+    );
+
+    return rows.map((row) => ({
+      traceId: row.trace_id,
+      sessionId: row.session_id,
+      startedAt: row.started_at,
+      steps: row.steps,
+      endedAs: row.ended_as,
+      failed: row.failed,
+    }));
+  }
+}
+
+interface SummaryRow {
+  trace_id: string;
+  session_id: string | null;
+  started_at: Date;
+  steps: number;
+  ended_as: string | null;
+  failed: boolean;
 }
 
 interface TraceRow {

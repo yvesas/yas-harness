@@ -175,8 +175,8 @@ describe('Router', () => {
 
       const decision = await router.route({ text: 'what did I spend?', attribution });
 
-      expect(traces.trace(decision.traceId)).toHaveLength(1);
-      expect(traces.trace(decision.traceId)[0]).toMatchObject({
+      expect(await traces.trace('t1', decision.traceId)).toHaveLength(1);
+      expect((await traces.trace('t1', decision.traceId))[0]).toMatchObject({
         kind: 'route',
         label: 'finance',
         succeeded: true,
@@ -190,7 +190,7 @@ describe('Router', () => {
 
       const decision = await router.route({ text: 'anything', attribution });
 
-      expect(traces.trace(decision.traceId)[0]).toMatchObject({
+      expect((await traces.trace('t1', decision.traceId))[0]).toMatchObject({
         label: 'only',
         detail: { modelCall: false },
       });

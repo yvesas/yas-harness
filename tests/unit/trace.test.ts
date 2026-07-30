@@ -25,7 +25,12 @@ describe('TurnTrace', () => {
     await trace.step({ kind: 'model_call', succeeded: true });
     await trace.step({ kind: 'reply', succeeded: true });
 
-    expect(recorder.trace(trace.traceId).map((step) => [step.sequence, step.kind])).toEqual([
+    expect(
+      (await recorder.trace(CONTEXT.tenantId, trace.traceId)).map((step) => [
+        step.sequence,
+        step.kind,
+      ]),
+    ).toEqual([
       [0, 'input'],
       [1, 'model_call'],
       [2, 'reply'],
@@ -41,7 +46,7 @@ describe('TurnTrace', () => {
     await second.step({ kind: 'input', succeeded: true });
 
     expect(second.traceId).toBe(first.traceId);
-    expect(recorder.trace(first.traceId)).toHaveLength(2);
+    expect(await recorder.trace(CONTEXT.tenantId, first.traceId)).toHaveLength(2);
   });
 
   it('gives separate turns separate trace ids', () => {
@@ -76,6 +81,33 @@ describe('TurnTrace', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('InMemoryTraceRecorder as a reader', () => {
+  it('summarises recent turns the way the Postgres adapter does', async () => {
+    const recorder = new InMemoryTraceRecorder();
+    const first = new TurnTrace(recorder, CONTEXT);
+    await first.step({ kind: 'input', succeeded: true });
+    await first.step({ kind: 'reply', label: 'end_turn', succeeded: true });
+    const second = new TurnTrace(recorder, CONTEXT);
+    await second.step({ kind: 'input', succeeded: true });
+    await second.step({ kind: 'tool_call', succeeded: false });
+
+    const recent = await recorder.recent(CONTEXT.tenantId);
+
+    // Newest first, one entry per turn, and the failed one is visible as such —
+    // the same contract the database adapter is tested against.
+    expect(recent.map((turn) => turn.traceId)).toEqual([second.traceId, first.traceId]);
+    expect(recent[0]).toMatchObject({ steps: 2, failed: true, endedAs: null });
+    expect(recent[1]).toMatchObject({ steps: 2, failed: false, endedAs: 'end_turn' });
+  });
+
+  it('does not show one tenant’s turns to another', async () => {
+    const recorder = new InMemoryTraceRecorder();
+    await new TurnTrace(recorder, CONTEXT).step({ kind: 'input', succeeded: true });
+
+    expect(await recorder.recent('someone-else')).toHaveLength(0);
   });
 });
 

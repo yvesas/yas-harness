@@ -23,17 +23,12 @@
  *
  * ---
  *
- * **Boundary holes this example had to punch** (recorded for F7.2 — each one is
- * a gap in the harness, not a quirk of the example):
- *
- * 1. **No tenant surface.** Nothing in `src/` knows about tenants, so creating
- *    the one every other call needs means raw SQL. A product's very first
- *    action has no API.
- * 2. **No read side for traces or cost.** `createHarness` hands out the write
- *    ports; reading a trace back or asking what a session spent needs a
- *    `pg.Pool` of your own and the Postgres adapters directly.
- * 3. **No pool handle.** The harness opens a connection pool and keeps it, so
- *    an example that needs 1 or 2 opens a second one.
+ * This file is also the evidence for F7.2b. Its first version had to punch four
+ * holes in the harness: no tenant surface, no read side for traces or cost, no
+ * pool handle, and no way to ask whether the configuration was usable. The
+ * first three are gone — it now uses `harness.tenants`, `harness.traceReader`
+ * and `harness.usage`, and imports no database driver at all. The fourth is
+ * still handled by catching, and is still a gap.
  *
  * Domain note: `examples/` may name a domain ("note"); `src/` may not. The
  * golden rule is about the harness, and this is a consumer of it.
@@ -42,12 +37,9 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
-import pg from 'pg';
 import { z } from 'zod';
 
 import {
-  PostgresTraceRecorder,
-  PostgresUsageRecorder,
   ToolRegistry,
   createHarness,
   ok,
@@ -60,27 +52,19 @@ const TENANT_SLUG = 'cli-example';
 const DEMO_MODULE = 'cli-demo';
 
 async function main(): Promise<void> {
-  const databaseUrl = process.env['DATABASE_URL'];
-  if (!databaseUrl) {
+  if (!process.env['DATABASE_URL']) {
     exit('DATABASE_URL is not set. Copy .env.example to .env and run `docker compose up -d`.');
   }
 
-  // Hole 1 and 2: a pool of our own, for the tenant and for reading back.
-  const pool = new pg.Pool({ connectionString: databaseUrl });
-  const traceReader = new PostgresTraceRecorder(pool);
-  const usageReader = new PostgresUsageRecorder(pool);
-
-  const tenantId = await ensureTenant(pool);
   const tools = demoTools();
 
-  // Hole 4: there is no way to ask the harness "am I configured?" — the only
-  // way to find out is to build it and catch. Fine for a library; a setup
-  // screen would want to report this rather than throw.
+  // The one hole still open: there is no way to ask the harness "am I
+  // configured?" — the only way to find out is to build it and catch. Fine for
+  // a library; a setup screen would want this reported, not thrown.
   let harness: Harness;
   try {
     harness = await createHarness({ tools });
   } catch (error) {
-    await pool.end();
     exit(
       `could not start the harness: ${describe(error)}\n\n` +
         `  config/models.json routes to providers whose keys must be in .env:\n` +
@@ -92,6 +76,9 @@ async function main(): Promise<void> {
   }
   // The tools were built before the stores existed; hand them the pool now.
   poolStore = harness.pools;
+
+  const tenant = await harness.tenants.ensure({ slug: TENANT_SLUG, name: 'CLI example' });
+  const tenantId = tenant.id;
   const session = await harness.sessions.create({ tenantId, personaId: 'default' });
 
   console.log(`\n  yas-harness — terminal chat`);
@@ -129,12 +116,11 @@ async function main(): Promise<void> {
       }
 
       console.log(`\nagent › ${reply.text || '(no answer)'}\n`);
-      await report(traceReader, usageReader, tenantId, session.id, reply);
+      await report(harness, tenantId, session.id, reply);
     }
   } finally {
     rl.close();
     await harness.close();
-    await pool.end();
   }
 }
 
@@ -168,19 +154,18 @@ async function settleApprovals(
 
 /** What the turn did and what it cost — the point of running this at all. */
 async function report(
-  traces: PostgresTraceRecorder,
-  usage: PostgresUsageRecorder,
+  harness: Harness,
   tenantId: string,
   sessionId: string,
   reply: AgentReply,
 ): Promise<void> {
-  const steps = await traces.trace(tenantId, reply.traceId);
+  const steps = await harness.traceReader.trace(tenantId, reply.traceId);
   console.log('  trace');
   for (const step of steps) {
     console.log(`    ${String(step.sequence).padStart(2)} ${line(step)}`);
   }
 
-  const spend = await usage.spend(tenantId, sessionId);
+  const spend = await harness.usage.spend(tenantId, sessionId);
   console.log(
     `  cost  $${spend.totalCostUsd.toFixed(6)} over ${spend.calls} call(s)` +
       ` · ${spend.inputTokens} in / ${spend.outputTokens} out` +
@@ -252,20 +237,6 @@ function pools(): Harness['pools'] {
     throw new Error('pool store not ready');
   }
   return poolStore;
-}
-
-/**
- * Hole 1: there is no tenant port, so the example writes the row itself.
- * `ON CONFLICT` keeps repeated runs on the same tenant, so notes survive.
- */
-async function ensureTenant(pool: pg.Pool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-     RETURNING id`,
-    [TENANT_SLUG, 'CLI example'],
-  );
-  return rows[0]!.id;
 }
 
 function describe(error: unknown): string {

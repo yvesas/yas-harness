@@ -96,6 +96,22 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **The read surface exists, and a real consumer chose its shape (F7.2b).**
+  The harness had rich write ports and almost no way to read: no tenant surface
+  at all (a product's first action was raw SQL), no way to read a trace or a
+  spend back, and no handle on the pool people were opening a second one for.
+  Adding `TenantStore`, `TraceReader` and `UsageReader` closed the first three;
+  the terminal example that had punched those holes now imports no database
+  driver at all, which is the proof rather than the claim.
+  **The readers are separate interfaces from the recorders** — the agent only
+  ever writes and an operator surface only ever reads, so neither should have to
+  implement the other half; the shipped adapters implement both. `TraceReader`
+  carries `recent()` as well as `trace()`, because a reader that can only answer
+  about a turn whose id you already hold is only useful to the caller who just
+  ran it. Reading is **not** redacted: what was written was already scrubbed on
+  the way in. `TenantStore.delete` is the erasure mechanism — every user-data
+  table cascades from `tenants`, so a deletion request is one call, which is
+  what makes it a right the harness can honour rather than describe.
 - **`createHarness` accepts a gateway, so the composition can be tested (F7.1).**
   The providers are constructed eagerly and each one needs its own key, so
   building a harness without a provider key was impossible — which meant the one

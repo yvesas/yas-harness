@@ -63,8 +63,27 @@ export interface UsageRecorder {
   record(usage: ModelUsageRecord): Promise<void>;
 }
 
+/** What a tenant spent, optionally narrowed to one conversation. */
+export interface TenantSpend {
+  readonly totalCostUsd: number;
+  readonly calls: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}
+
+/**
+ * Port: reading spend back.
+ *
+ * Separate from `UsageRecorder` for the same reason the trace reader is
+ * separate from its recorder — the gateway only writes, an operator surface
+ * only reads, and neither should have to implement the other half.
+ */
+export interface UsageReader {
+  spend(tenantId: string, sessionId?: string): Promise<TenantSpend>;
+}
+
 /** For tests and for running without a database. */
-export class InMemoryUsageRecorder implements UsageRecorder {
+export class InMemoryUsageRecorder implements UsageRecorder, UsageReader {
   readonly records: ModelUsageRecord[] = [];
 
   record(usage: ModelUsageRecord): Promise<void> {
@@ -74,6 +93,19 @@ export class InMemoryUsageRecorder implements UsageRecorder {
 
   totalCostUsd(): number {
     return this.records.reduce((total, record) => total + record.costUsd, 0);
+  }
+
+  spend(tenantId: string, sessionId?: string): Promise<TenantSpend> {
+    const matching = this.records.filter(
+      (record) =>
+        record.tenantId === tenantId && (sessionId === undefined || record.sessionId === sessionId),
+    );
+    return Promise.resolve({
+      totalCostUsd: matching.reduce((total, record) => total + record.costUsd, 0),
+      calls: matching.length,
+      inputTokens: matching.reduce((total, record) => total + record.usage.inputTokens, 0),
+      outputTokens: matching.reduce((total, record) => total + record.usage.outputTokens, 0),
+    });
   }
 }
 

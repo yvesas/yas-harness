@@ -14,10 +14,15 @@ import { randomUUID } from 'node:crypto';
 import type { CreateTenantInput, Tenant, TenantStore } from './tenant-store.js';
 import { TenantError, assertValidSlug } from './tenant-store.js';
 
+/* eslint-disable @typescript-eslint/require-await -- see the note on create */
 export class InMemoryTenantStore implements TenantStore {
   readonly #tenants = new Map<string, Tenant>();
 
-  create(input: CreateTenantInput): Promise<Tenant> {
+  // `create` and `ensure` are `async` with no `await` on purpose: they validate,
+  // and being async turns a rejected slug into a rejected promise rather than a
+  // synchronous throw — the shape the Postgres adapter has, and the one callers
+  // written against the port expect. The same rule the pool store follows.
+  async create(input: CreateTenantInput): Promise<Tenant> {
     assertValidSlug(input.slug);
     if ([...this.#tenants.values()].some((tenant) => tenant.slug === input.slug)) {
       throw new TenantError(`tenant slug "${input.slug}" is already taken`);
@@ -29,10 +34,10 @@ export class InMemoryTenantStore implements TenantStore {
       createdAt: new Date(),
     };
     this.#tenants.set(tenant.id, tenant);
-    return Promise.resolve(tenant);
+    return tenant;
   }
 
-  ensure(input: CreateTenantInput): Promise<Tenant> {
+  async ensure(input: CreateTenantInput): Promise<Tenant> {
     assertValidSlug(input.slug);
     const existing = [...this.#tenants.values()].find((tenant) => tenant.slug === input.slug);
     if (!existing) {
@@ -40,7 +45,7 @@ export class InMemoryTenantStore implements TenantStore {
     }
     const updated: Tenant = { ...existing, name: input.name };
     this.#tenants.set(updated.id, updated);
-    return Promise.resolve(updated);
+    return updated;
   }
 
   find(id: string): Promise<Tenant | null> {

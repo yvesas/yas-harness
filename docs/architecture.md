@@ -177,5 +177,6 @@ in-memory double could agree with a wrong constraint.
 
 SOLID, hexagonal, clean code, multi-tenant from day one — stated in full in
 [`CONTRIBUTING.md`](../CONTRIBUTING.md) and enforced where they can be:
-`npm run boundaries` for the golden rule and the port boundary, the type
-checker for the contracts, and integration tests for the isolation guarantees.
+`npm run boundaries` for the golden rule and the port boundary,
+`npm run isolation` for multi-tenancy in the schema, the type checker for the
+contracts, and integration tests for the isolation guarantees.

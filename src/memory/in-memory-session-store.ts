@@ -36,9 +36,22 @@ export class InMemorySessionStore implements SessionStore {
     return Promise.resolve(session && session.tenantId === tenantId ? session : null);
   }
 
-  async messages(tenantId: string, sessionId: string): Promise<StoredMessage[]> {
-    await this.#assertVisible(tenantId, sessionId);
-    return [...(this.#messages.get(sessionId) ?? [])];
+  /**
+   * Empty, not an error, when the session is not this tenant's.
+   *
+   * It matches the Postgres adapter, where the tenant is simply part of the
+   * `WHERE` clause and a miss is indistinguishable from an empty conversation.
+   * Making this one throw instead would be *stricter* but not more isolating —
+   * and an adapter that exists so a product can test without a database is only
+   * worth having if the two behave the same. Writing is the opposite case: a
+   * cross-tenant append fails on both, because the database refuses the row.
+   */
+  messages(tenantId: string, sessionId: string): Promise<StoredMessage[]> {
+    const session = this.#sessions.get(sessionId);
+    if (!session || session.tenantId !== tenantId) {
+      return Promise.resolve([]);
+    }
+    return Promise.resolve([...(this.#messages.get(sessionId) ?? [])]);
   }
 
   async append(

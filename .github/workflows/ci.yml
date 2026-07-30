@@ -39,6 +39,12 @@ jobs:
       - name: Architecture boundaries
         run: npm run boundaries
 
+      - name: Tenant isolation
+        # Reads the migrations: every table holding user data carries tenant_id,
+        # cascades from tenants, and names the tenant in any key that reaches
+        # another table. The next table is what regresses, not the current ones.
+        run: npm run isolation
+
       - name: Typecheck
         run: npm run typecheck
 

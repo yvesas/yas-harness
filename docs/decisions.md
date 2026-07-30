@@ -96,6 +96,23 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **Isolation is checked in the schema and across both adapters (F7.3).** Every
+  table already carried `tenant_id` and every cross-table key was already
+  composite — the risk was never the tables that exist, which have their own
+  tests, but the **next** one: a table added without a tenant, or with a key
+  naming a row without naming its tenant, would let one tenant's data attach to
+  another's while every existing test still passed. `npm run isolation` reads
+  the migrations and refuses exactly that. Writing it corrected a rule rather
+  than the code: `messages`, `approvals`, `credentials` and `resource_cache`
+  anchor their tenant **transitively**, through a cascading composite key into
+  `sessions` or `connections`, and that is *stronger* than a direct reference —
+  a child's tenant cannot disagree with its parent's, because they travel in one
+  key. **The in-memory adapters are the sharper risk**, because they exist so a
+  product can test without a database: an adapter that leaks, or merely behaves
+  differently, makes a product's whole suite a false pass. Sweeping them found
+  two real defects — `InMemorySessionStore.messages` **threw** where Postgres
+  returns empty, and `InMemoryTenantStore` threw **synchronously** instead of
+  rejecting, breaking the rule the pool store already documents. Both fixed.
 - **The package is importable, and a check proves it from the outside (F7.2c).**
   There were no `main`, `exports` or `files`, so the harness could be forked but
   never depended on — and a v1.0.0 tag of a library with no entry point is a

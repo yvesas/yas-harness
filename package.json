@@ -6,11 +6,30 @@
   "author": "YAS Softwares LTDA",
   "type": "module",
   "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "yas-harness-migrate": "./scripts/migrate.mjs"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "config",
+    "scripts/migrate.mjs",
+    "NOTICE"
+  ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks || true",
+    "prepare": "npm run hooks && npm run build",
     "build": "tsc --build tsconfig.build.json",
     "clean": "tsc --build tsconfig.build.json --clean",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
@@ -28,7 +47,9 @@
     "license:check": "node scripts/check-license-headers.mjs",
     "license:fix": "node scripts/check-license-headers.mjs --fix",
     "check": "npm run lint && npm run format:check && npm run license:check && npm run boundaries && npm run typecheck && npm run test",
-    "boundaries": "node scripts/check-boundaries.mjs"
+    "boundaries": "node scripts/check-boundaries.mjs",
+    "hooks": "git config core.hooksPath .githooks || true",
+    "package:check": "node scripts/check-package.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

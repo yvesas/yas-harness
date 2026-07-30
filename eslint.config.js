@@ -30,6 +30,12 @@ export default tseslint.config(
     },
   },
   {
+    // An example that runs in a terminal exists to print. The rule is there to
+    // keep stray logging out of library code, which `src/` still enforces.
+    files: ['examples/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  {
     // Config files and the scripts/ tooling are plain ESM, outside the
     // TypeScript project: lint them without type information.
     files: ['**/*.js', '**/*.mjs'],

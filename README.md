@@ -65,6 +65,28 @@ export ANTHROPIC_API_KEY=...   # or GROQ_API_KEY, matching config/models.json
 npm run chat
 ```
 
+### Use it from another project
+
+The harness is a library. A product either **forks** this repository (the model
+these docs assume) or **depends** on it:
+
+```bash
+npm install github:yvesas/yas-harness#v0.1.0
+npx yas-harness-migrate up            # the schema ships with the package
+cp -r node_modules/yas-harness/config ./config
+```
+
+```ts
+import { createHarness } from 'yas-harness';
+
+const harness = await createHarness();          // reads ./config and DATABASE_URL
+const tenant = await harness.tenants.ensure({ slug: 'acme', name: 'Acme' });
+```
+
+> Not on npm yet: `private: true` in `package.json` is the deliberate guard, and
+> dropping it is the one-line switch at v1.0.0. Install by tag until then —
+> `npm run package:check` proves the tarball installs and imports either way.
+
 ## Scripts
 
 | Command | What it does |
@@ -74,6 +96,7 @@ npm run chat
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm test` | Run the test suite |
 | `npm run check` | Lint, typecheck and test — run this before committing |
+| `npm run package:check` | Pack, install into a throwaway project and import by name |
 | `npm run migrate up\|down\|status` | Apply, roll back or inspect migrations |
 
 ## Architecture

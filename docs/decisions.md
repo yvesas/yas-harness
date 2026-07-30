@@ -96,6 +96,23 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **The package is importable, and a check proves it from the outside (F7.2c).**
+  There were no `main`, `exports` or `files`, so the harness could be forked but
+  never depended on — and a v1.0.0 tag of a library with no entry point is a
+  strange thing to ship. The manifest now declares them, and the tarball carries
+  what a consumer cannot work without: the built code **with types**, the
+  `migrations` (a consumer has to create the schema), the migration runner as a
+  `bin`, a starting `config/`, and `NOTICE`, which the Apache licence requires
+  to travel with the code. **`private: true` stays** as the deliberate guard
+  against an accidental publish; dropping it is the one-line switch at v1.0.0,
+  and installing by git tag works meanwhile. `prepare` had to become
+  `hooks && build` — npm runs it both before packing and after a git-URL
+  install, so without a build there the tarball ships no `dist`; the git-hooks
+  setup runs first so a developer with a broken build still gets the
+  co-authorship guard. The check (`npm run package:check`, in CI) packs,
+  installs into a throwaway project and imports **by package name**: every test
+  here imports `src/` by relative path, so a broken exports map or a missing
+  file passes the whole suite and fails on the first consumer.
 - **The read surface exists, and a real consumer chose its shape (F7.2b).**
   The harness had rich write ports and almost no way to read: no tenant surface
   at all (a product's first action was raw SQL), no way to read a trace or a

@@ -48,6 +48,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Package
+        # Packs, installs into a throwaway project and imports by name. The one
+        # thing the test suite cannot catch: every test imports src/ by relative
+        # path, so a broken exports map or a missing file only fails on the
+        # first consumer.
+        run: npm run package:check
+
   database:
     name: Migrations and integration tests
     runs-on: ubuntu-latest

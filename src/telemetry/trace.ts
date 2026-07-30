@@ -71,20 +71,98 @@ export interface TraceRecorder {
   record(step: TraceStep): Promise<void>;
 }
 
+/** One turn, as a list of turns shows it. */
+export interface TraceSummary {
+  readonly traceId: string;
+  readonly sessionId: string | null;
+  readonly startedAt: Date;
+  readonly steps: number;
+  /** The closing step's label — how the turn ended, when it reached an end. */
+  readonly endedAs: string | null;
+  /** Whether any step failed, so a list can surface the turns worth opening. */
+  readonly failed: boolean;
+}
+
+export interface RecentTracesQuery {
+  readonly limit?: number;
+  readonly sessionId?: string;
+}
+
+/**
+ * Port: reading traces back.
+ *
+ * Deliberately separate from `TraceRecorder`. Writing and reading are wanted by
+ * different callers — the agent only ever writes, an operator surface only ever
+ * reads — and a product that just wants a turn recorded should not have to
+ * implement queries. The shipped adapters implement both.
+ */
+export interface TraceReader {
+  /** One turn's steps, in order. */
+  trace(tenantId: string, traceId: string): Promise<TraceStep[]>;
+  /**
+   * The most recent turns, newest first — one entry per turn, not per step.
+   *
+   * Without this a reader can only answer about a turn whose id you already
+   * hold, which is only true of the turn you just ran. "What happened lately"
+   * is the question anyone else has.
+   */
+  recent(tenantId: string, query?: RecentTracesQuery): Promise<TraceSummary[]>;
+}
+
+const DEFAULT_RECENT_LIMIT = 20;
+
 /** For tests and for running without a database. */
-export class InMemoryTraceRecorder implements TraceRecorder {
+export class InMemoryTraceRecorder implements TraceRecorder, TraceReader {
   readonly steps: TraceStep[] = [];
+  /** When each turn was first seen — the table has `created_at`; memory needs one. */
+  readonly #startedAt = new Map<string, Date>();
 
   record(step: TraceStep): Promise<void> {
     this.steps.push(step);
+    if (!this.#startedAt.has(step.traceId)) {
+      this.#startedAt.set(step.traceId, new Date());
+    }
     return Promise.resolve();
   }
 
   /** One turn's steps, in order. */
-  trace(traceId: string): TraceStep[] {
+  trace(tenantId: string, traceId: string): Promise<TraceStep[]> {
+    return Promise.resolve(this.#stepsOf(tenantId, traceId));
+  }
+
+  recent(tenantId: string, query: RecentTracesQuery = {}): Promise<TraceSummary[]> {
+    const ids: string[] = [];
+    for (const step of this.steps) {
+      if (step.tenantId !== tenantId) continue;
+      if (query.sessionId !== undefined && step.sessionId !== query.sessionId) continue;
+      if (!ids.includes(step.traceId)) ids.push(step.traceId);
+    }
+
+    return Promise.resolve(
+      ids
+        .reverse() // newest first; insertion order is the only clock in memory
+        .slice(0, query.limit ?? DEFAULT_RECENT_LIMIT)
+        .map((traceId) => this.#summarise(tenantId, traceId)),
+    );
+  }
+
+  #stepsOf(tenantId: string, traceId: string): TraceStep[] {
     return this.steps
-      .filter((step) => step.traceId === traceId)
+      .filter((step) => step.tenantId === tenantId && step.traceId === traceId)
       .sort((a, b) => a.sequence - b.sequence);
+  }
+
+  #summarise(tenantId: string, traceId: string): TraceSummary {
+    const steps = this.#stepsOf(tenantId, traceId);
+    const last = steps.at(-1);
+    return {
+      traceId,
+      sessionId: steps[0]?.sessionId ?? null,
+      startedAt: this.#startedAt.get(traceId) ?? new Date(),
+      steps: steps.length,
+      endedAs: last?.kind === 'reply' ? (last.label ?? null) : null,
+      failed: steps.some((step) => !step.succeeded),
+    };
   }
 }
 

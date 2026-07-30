@@ -54,12 +54,15 @@ import { RedactingPoolStore } from './pools/redacting-pool-store.js';
 import type { PoolStore } from './pools/pool-store.js';
 import { ContextBroker } from './pools/context-broker.js';
 import { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
+import { PostgresTenantStore } from './tenants/postgres-tenant-store.js';
+import type { TenantStore } from './tenants/tenant-store.js';
 import { Router } from './router/router.js';
 import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 import { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
 import { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
-import type { TraceRecorder } from './telemetry/trace.js';
+import type { TraceReader, TraceRecorder } from './telemetry/trace.js';
+import type { UsageReader } from './telemetry/model-usage.js';
 
 export const HARNESS_NAME = 'yas-harness';
 
@@ -70,18 +73,23 @@ export interface Harness {
   readonly tools: ToolRegistry;
   readonly modules: ModuleRegistry;
   readonly router: Router;
+  /**
+   * The isolation boundary: create the tenant every other call needs.
+   * Without this a product's very first action has no API.
+   */
+  readonly tenants: TenantStore;
   readonly pools: PoolStore;
   /**
    * Carries a context request to the module that owns the data. A module that
    * declares no `disclose` shares nothing, so this is safe to hand out.
    */
   readonly context: ContextBroker;
-  /**
-   * Where each step of a turn is written, redacted on the way. This is the
-   * write side; reading a trace back is a query a product owns, against the
-   * `traces` table or through `PostgresTraceRecorder.trace()`.
-   */
+  /** Where each step of a turn is written, redacted on the way. */
   readonly traces: TraceRecorder;
+  /** Reading turns back: one turn's steps, or the most recent turns. */
+  readonly traceReader: TraceReader;
+  /** What a tenant or a conversation has spent. */
+  readonly usage: UsageReader;
   readonly approvals: ApprovalStore;
   readonly connections: ConnectionStore;
   readonly connectors: ConnectorRegistry;
@@ -177,6 +185,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // wrapped so a secret never lands there in the clear.
   const redactor = new RegexSecretRedactor();
   const sessions = new RedactingSessionStore(new PostgresSessionStore(pool), redactor);
+  const usageStore = new PostgresUsageRecorder(pool);
 
   const compressionProfile = options.compressionProfile ?? 'none';
   // A supplied gateway replaces the routed one outright — including the
@@ -188,7 +197,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     new RoutedGateway({
       config: modelConfig,
       providers: routedProvidersFor(modelConfig),
-      recorder: new RedactingUsageRecorder(new PostgresUsageRecorder(pool), redactor),
+      recorder: new RedactingUsageRecorder(usageStore, redactor),
       redactor,
       ...(compressionProfile === 'none' ? {} : { compressor: compressorFor(compressionProfile) }),
     });
@@ -233,7 +242,11 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 
   // Traces carry the user's own words and a tool's input, so they go through
   // the redactor like every other durable path.
-  const traces = new RedactingTraceRecorder(new PostgresTraceRecorder(pool), redactor);
+  // One adapter, two ports: the agent writes through the redacting decorator,
+  // an operator surface reads through the reader. Reading needs no redaction —
+  // what was written was already scrubbed.
+  const traceStore = new PostgresTraceRecorder(pool);
+  const traces = new RedactingTraceRecorder(traceStore, redactor);
 
   return {
     agent: new Agent({ gateway, sessions, tools, persona, approvals, traces }),
@@ -243,6 +256,9 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     modules,
     router: new Router(gateway, modules, traces),
     traces,
+    traceReader: traceStore,
+    usage: usageStore,
+    tenants: new PostgresTenantStore(pool),
     pools,
     context: new ContextBroker(modules, { traces }),
     approvals,
@@ -433,7 +449,14 @@ export type { CompressionUsage, ModelUsageRecord, UsageRecorder } from './teleme
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 export { InMemoryTraceRecorder, TurnTrace } from './telemetry/trace.js';
+export { InMemoryTenantStore } from './tenants/in-memory-tenant-store.js';
+export { PostgresTenantStore } from './tenants/postgres-tenant-store.js';
+export { TenantError, assertValidSlug } from './tenants/tenant-store.js';
+export type { CreateTenantInput, Tenant, TenantStore } from './tenants/tenant-store.js';
 export type {
+  RecentTracesQuery,
+  TraceReader,
+  TraceSummary,
   TraceRecorder,
   TraceStep,
   TraceStepInput,

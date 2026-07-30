@@ -20,6 +20,7 @@ import { InMemoryApprovalStore } from '../../src/approval/in-memory-approval-sto
 import { InMemorySessionStore } from '../../src/memory/in-memory-session-store.js';
 import type { ScriptedTurn } from '../../src/models/scripted-gateway.js';
 import { ScriptedGateway, callsTool, says } from '../../src/models/scripted-gateway.js';
+import type { TraceStep } from '../../src/telemetry/trace.js';
 import { InMemoryTraceRecorder } from '../../src/telemetry/trace.js';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -80,16 +81,21 @@ async function runTurn(
 }
 
 /** The turn as a reader would scan it: the kinds, in order. */
-function kinds(traceId: string): string[] {
-  return traces.trace(traceId).map((step) => step.kind);
+async function kinds(traceId: string): Promise<string[]> {
+  return (await traces.trace(TENANT, traceId)).map((step) => step.kind);
+}
+
+/** One turn's steps, for the assertions that index into them. */
+function stepsOf(traceId: string): Promise<TraceStep[]> {
+  return traces.trace(TENANT, traceId);
 }
 
 describe('agent traces', () => {
   it('records a plain turn from input to reply', async () => {
     const { reply } = await runTurn([says('It is sunny.')]);
 
-    expect(kinds(reply.traceId)).toEqual(['input', 'model_call', 'reply']);
-    const [input, modelCall, ended] = traces.trace(reply.traceId);
+    expect(await kinds(reply.traceId)).toEqual(['input', 'model_call', 'reply']);
+    const [input, modelCall, ended] = await stepsOf(reply.traceId);
     // The message itself is not copied in — it is already on the session.
     expect(input!.detail).toEqual({ characters: 'what is the weather in Lisbon?'.length });
     expect(modelCall).toMatchObject({ succeeded: true, label: 'scripted/reasoning' });
@@ -102,14 +108,14 @@ describe('agent traces', () => {
       says('22C and clear.'),
     ]);
 
-    expect(kinds(reply.traceId)).toEqual([
+    expect(await kinds(reply.traceId)).toEqual([
       'input',
       'model_call',
       'tool_call',
       'model_call',
       'reply',
     ]);
-    expect(traces.trace(reply.traceId)[2]).toMatchObject({
+    expect((await stepsOf(reply.traceId))[2]).toMatchObject({
       kind: 'tool_call',
       label: 'get_weather',
       succeeded: true,
@@ -120,7 +126,7 @@ describe('agent traces', () => {
   it('marks a failed tool call as failed, with its reason', async () => {
     const { reply } = await runTurn([callsTool('explode', {}), says('That did not work.')]);
 
-    const toolStep = traces.trace(reply.traceId).find((step) => step.kind === 'tool_call');
+    const toolStep = (await stepsOf(reply.traceId)).find((step) => step.kind === 'tool_call');
     expect(toolStep).toMatchObject({ label: 'explode', succeeded: false });
     expect(toolStep?.errorMessage).toContain('nope');
   });
@@ -146,12 +152,12 @@ describe('agent traces', () => {
 
     const reply = await agent.run({ tenantId: TENANT, sessionId: session.id, input: 'email them' });
 
-    expect(kinds(reply.traceId)).toEqual(['input', 'model_call', 'approval', 'reply']);
-    expect(traces.trace(reply.traceId)[2]).toMatchObject({
+    expect(await kinds(reply.traceId)).toEqual(['input', 'model_call', 'approval', 'reply']);
+    expect((await stepsOf(reply.traceId))[2]).toMatchObject({
       kind: 'approval',
       detail: { waitingOn: ['send_email'] },
     });
-    expect(traces.trace(reply.traceId)[3]).toMatchObject({ label: 'awaiting_approval' });
+    expect((await stepsOf(reply.traceId))[3]).toMatchObject({ label: 'awaiting_approval' });
   });
 
   it('says when a turn ran out of iterations instead of answering', async () => {
@@ -161,7 +167,7 @@ describe('agent traces', () => {
       callsTool('get_weather', { city: 'Porto' }),
     ]);
 
-    const ended = traces.trace(reply.traceId).at(-1);
+    const ended = (await stepsOf(reply.traceId)).at(-1);
     // An exhausted budget is not a success, and a trace that called it one
     // would hide the bug it exists to show.
     expect(ended).toMatchObject({ kind: 'reply', label: 'iteration_limit', succeeded: false });
@@ -204,7 +210,7 @@ describe('agent traces', () => {
     });
 
     expect(reply.traceId).toBe('33333333-3333-4333-8333-333333333333');
-    expect(traces.trace(reply.traceId)).toHaveLength(3);
+    expect(await stepsOf(reply.traceId)).toHaveLength(3);
   });
 
   it('runs the turn unchanged when no recorder is wired', async () => {

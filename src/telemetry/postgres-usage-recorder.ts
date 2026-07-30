@@ -10,16 +10,9 @@
 
 import type { Pool } from 'pg';
 
-import type { ModelUsageRecord, UsageRecorder } from './model-usage.js';
+import type { ModelUsageRecord, TenantSpend, UsageReader, UsageRecorder } from './model-usage.js';
 
-export interface TenantSpend {
-  readonly totalCostUsd: number;
-  readonly calls: number;
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-}
-
-export class PostgresUsageRecorder implements UsageRecorder {
+export class PostgresUsageRecorder implements UsageRecorder, UsageReader {
   constructor(private readonly pool: Pool) {}
 
   async record(usage: ModelUsageRecord): Promise<void> {

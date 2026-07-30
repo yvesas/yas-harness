@@ -38,7 +38,9 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `Connector` | `src/connections/connector.ts` | Confluence, Jira, GitHub, Drive, Slack, Notion, Calendar, Cal.com, Calendly, Teams, `MemoryConnector` |
 | `ResourceCacheStore` | `src/connections/resource-cache-store.ts` | `PostgresResourceCacheStore`, `InMemoryResourceCacheStore` |
 | `UsageRecorder` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
-| `TraceRecorder` | `src/telemetry/trace.ts` | `PostgresTraceRecorder`, `InMemoryTraceRecorder` |
+| `TraceRecorder` / `TraceReader` | `src/telemetry/trace.ts` | `PostgresTraceRecorder`, `InMemoryTraceRecorder` (both ports) |
+| `UsageReader` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
+| `TenantStore` | `src/tenants/tenant-store.ts` | `PostgresTenantStore`, `InMemoryTenantStore` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden
 in `tests/` — products that fork the harness need them to test their own agents
@@ -71,6 +73,7 @@ without a network or an API bill.
 | `src/models/` | Model gateway, provider port, routing config |
 | `src/memory/` | Session and conversation state |
 | `src/pools/` | Per-module data pools, and the ask-the-owner flow across them |
+| `src/tenants/` | The isolation boundary: creating, finding and erasing a tenant |
 | `src/telemetry/` | What a turn cost (`model_usage`) and what it did (`traces`) |
 | `src/connections/` | External connectors, connections and the credential vault |
 | `src/connections/connectors/` | Concrete connectors (Confluence, Jira, GitHub, Google Drive, Slack, Notion, Google Calendar, Cal.com, Calendly, Microsoft Teams) and shared Atlassian plumbing |

@@ -160,6 +160,46 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
     expect(await recorder.trace(tenantA, TRACE)).toHaveLength(0);
   });
 
+  it('summarises recent turns, newest first, one row per turn', async () => {
+    const older = '77777777-7777-4777-8777-777777777777';
+    await recorder.record(step({ traceId: older, sequence: 0, kind: 'input' }));
+    await recorder.record(step({ traceId: older, sequence: 1, kind: 'reply', label: 'end_turn' }));
+    await recorder.record(step({ sequence: 0, kind: 'input' }));
+    await recorder.record(step({ sequence: 1, kind: 'tool_call', succeeded: false }));
+    await recorder.record(step({ sequence: 2, kind: 'reply', label: 'iteration_limit' }));
+
+    const recent = await recorder.recent(tenantA);
+
+    expect(recent).toHaveLength(2);
+    expect(recent[0]).toMatchObject({
+      traceId: TRACE,
+      steps: 3,
+      endedAs: 'iteration_limit',
+      // A list of turns exists to surface the ones worth opening.
+      failed: true,
+    });
+    expect(recent[1]).toMatchObject({ traceId: older, steps: 2, failed: false });
+  });
+
+  it('narrows recent turns to one conversation, and respects a limit', async () => {
+    const other = await createSession(pool, tenantA);
+    await recorder.record(step({ sequence: 0 }));
+    await recorder.record(
+      step({ traceId: '88888888-8888-4888-8888-888888888888', sessionId: other, sequence: 0 }),
+    );
+
+    expect(await recorder.recent(tenantA, { sessionId: other })).toHaveLength(1);
+    expect(await recorder.recent(tenantA, { limit: 1 })).toHaveLength(1);
+  });
+
+  it('hides another tenant’s turns from the list', async () => {
+    await recorder.record(step({ sequence: 0 }));
+    await recorder.record(step({ tenantId: tenantB, sessionId: null, sequence: 0 }));
+
+    expect(await recorder.recent(tenantB)).toHaveLength(1);
+    expect((await recorder.recent(tenantB))[0]?.sessionId).toBeNull();
+  });
+
   it('deletes traces along with the tenant', async () => {
     await recorder.record(step({ sessionId: null }));
 

@@ -132,6 +132,28 @@ export interface HarnessOptions {
    * Turn this up only once `evaluateCompression` says answers hold (E5.5).
    */
   readonly compressionProfile?: CompressionProfile;
+  /**
+   * Use this gateway instead of building the routed one from
+   * `config/models.json`.
+   *
+   * Exists so a harness can be built without a provider key — a `ScriptedGateway`
+   * makes the whole composition testable, which is otherwise impossible: the
+   * providers are constructed eagerly and each one needs its own key. A product
+   * that wants to test its own wiring, or run offline, passes one here.
+   */
+  readonly gateway?: ModelGateway;
+}
+
+/**
+ * Only the providers the configuration actually routes to are constructed, so a
+ * deployment that uses one provider does not need the other's credentials.
+ */
+function routedProvidersFor(modelConfig: Awaited<ReturnType<typeof loadModelConfig>>) {
+  const routed = new Set(Object.values(modelConfig.models).map((entry) => entry.provider));
+  const providers: ModelProvider[] = [];
+  if (routed.has('anthropic')) providers.push(new AnthropicProvider());
+  if (routed.has('groq')) providers.push(new GroqProvider());
+  return providers;
 }
 
 /**
@@ -156,21 +178,20 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const redactor = new RegexSecretRedactor();
   const sessions = new RedactingSessionStore(new PostgresSessionStore(pool), redactor);
 
-  // Only providers the configuration actually routes to are constructed, so a
-  // deployment that uses one provider does not need the other's credentials.
-  const routedProviders = new Set(Object.values(modelConfig.models).map((entry) => entry.provider));
-  const providers: ModelProvider[] = [];
-  if (routedProviders.has('anthropic')) providers.push(new AnthropicProvider());
-  if (routedProviders.has('groq')) providers.push(new GroqProvider());
-
   const compressionProfile = options.compressionProfile ?? 'none';
-  const gateway = new RoutedGateway({
-    config: modelConfig,
-    providers,
-    recorder: new RedactingUsageRecorder(new PostgresUsageRecorder(pool), redactor),
-    redactor,
-    ...(compressionProfile === 'none' ? {} : { compressor: compressorFor(compressionProfile) }),
-  });
+  // A supplied gateway replaces the routed one outright — including the
+  // providers, which is the point: constructing a provider needs its key, so
+  // without this there is no way to build a harness without one, and a product
+  // could never test its own wiring.
+  const gateway =
+    options.gateway ??
+    new RoutedGateway({
+      config: modelConfig,
+      providers: routedProvidersFor(modelConfig),
+      recorder: new RedactingUsageRecorder(new PostgresUsageRecorder(pool), redactor),
+      redactor,
+      ...(compressionProfile === 'none' ? {} : { compressor: compressorFor(compressionProfile) }),
+    });
   const tools = options.tools ?? new ToolRegistry();
   const modules = options.modules ?? new ModuleRegistry();
   const pools = new RedactingPoolStore(new PostgresPoolStore(pool), redactor);

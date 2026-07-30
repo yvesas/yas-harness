@@ -54,10 +54,22 @@ npm run migrate up          # create the schema
 npm run check               # lint + typecheck + tests
 ```
 
+### Talk to it
+
+`examples/chat.ts` is a terminal chat against a real harness — the fastest way
+to see the whole thing work. It runs a turn end to end: config, persona, model,
+session, tools, the approval pause, the trace and the cost.
+
+```bash
+export ANTHROPIC_API_KEY=...   # or GROQ_API_KEY, matching config/models.json
+npm run chat
+```
+
 ## Scripts
 
 | Command | What it does |
 | --- | --- |
+| `npm run chat` | Terminal chat against a real harness (`examples/chat.ts`) |
 | `npm run dev` | Run the harness with reload on change |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm test` | Run the test suite |

@@ -59,6 +59,7 @@ import type { TenantStore } from './tenants/tenant-store.js';
 import { Router } from './router/router.js';
 import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
+import { OtlpTraceRecorder, type OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
 import { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
 import { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 import type { TraceReader, TraceRecorder } from './telemetry/trace.js';
@@ -150,6 +151,15 @@ export interface HarnessOptions {
    * that wants to test its own wiring, or run offline, passes one here.
    */
   readonly gateway?: ModelGateway;
+  /**
+   * Where to export traces as OpenTelemetry spans, on top of storing them.
+   *
+   * Defaults to the standard environment variables — `OTEL_EXPORTER_OTLP_ENDPOINT`
+   * and `OTEL_SERVICE_NAME` — so a deployment that already sets what every
+   * other service in the fleet reads gets export without touching code. Pass
+   * `{ endpoint: '' }` to keep it off regardless of the environment.
+   */
+  readonly otlp?: Partial<OtlpExportOptions>;
 }
 
 /**
@@ -170,6 +180,31 @@ function routedProvidersFor(modelConfig: Awaited<ReturnType<typeof loadModelConf
  * Products that need a different provider or store construct `Agent`
  * themselves — this is the convenient default, not the only way in.
  */
+/**
+ * The trace exporter, if this deployment wants one.
+ *
+ * The endpoint comes from `OTEL_EXPORTER_OTLP_ENDPOINT` when the caller does
+ * not pass one — the variable the rest of an instrumented fleet already reads,
+ * so wiring the harness into an existing collector is a deployment concern
+ * rather than a code change. No endpoint means no exporter at all: an empty
+ * decorator would still allocate a queue and a timer to send nothing.
+ */
+function otlpExporter(
+  inner: TraceRecorder,
+  options: Partial<OtlpExportOptions> = {},
+): OtlpTraceRecorder | null {
+  const endpoint = options.endpoint ?? process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
+  if (!endpoint) {
+    return null;
+  }
+  const serviceName = options.serviceName ?? process.env['OTEL_SERVICE_NAME'];
+  return new OtlpTraceRecorder(inner, {
+    ...options,
+    endpoint,
+    ...(serviceName === undefined ? {} : { serviceName }),
+  });
+}
+
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   const databaseUrl = options.databaseUrl ?? process.env['DATABASE_URL'];
   if (!databaseUrl) {
@@ -245,8 +280,12 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // One adapter, two ports: the agent writes through the redacting decorator,
   // an operator surface reads through the reader. Reading needs no redaction —
   // what was written was already scrubbed.
+  // The exporter sits *inside* the redactor: what leaves for a collector is
+  // scrubbed by the same pass as what is stored. The other way round would send
+  // a third party exactly what the redactor exists to withhold.
   const traceStore = new PostgresTraceRecorder(pool);
-  const traces = new RedactingTraceRecorder(traceStore, redactor);
+  const exporter = otlpExporter(traceStore, options.otlp);
+  const traces = new RedactingTraceRecorder(exporter ?? traceStore, redactor);
 
   return {
     agent: new Agent({ gateway, sessions, tools, persona, approvals, traces }),
@@ -269,7 +308,12 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     resourceCache,
     cachedConnections,
     mcpServer,
-    close: () => pool.end(),
+    close: async () => {
+      // Spans first: the last steps of a turn are usually the ones explaining
+      // why the process is going down, and they are lost once the queue is.
+      await exporter?.close();
+      await pool.end();
+    },
   };
 }
 
@@ -473,6 +517,17 @@ export type {
 } from './telemetry/trace.js';
 export { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 export { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
+export { OtlpTraceRecorder } from './telemetry/otlp-trace-recorder.js';
+export type { OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
+export { toOtlpPayload, toSpan, toSpanId, toTraceId } from './telemetry/otlp.js';
+export type {
+  OtlpAttribute,
+  OtlpSpan,
+  OtlpTracePayload,
+  OtlpValue,
+  ResourceOptions,
+  SpanOptions,
+} from './telemetry/otlp.js';
 export { RegexSecretRedactor } from './redaction/regex-secret-redactor.js';
 export { redactDeep } from './redaction/secret-redactor.js';
 export type { SecretRedactor } from './redaction/secret-redactor.js';

@@ -33,7 +33,8 @@ A trace is a **flat, ordered list** of steps sharing a `traceId`, not a tree.
 Flat is enough to reconstruct a turn, cheap to append to as it happens (a turn
 that dies half way still shows how far it got), and maps onto a span list — the
 fields are deliberately span-like: an id, an ordinal, a kind, a duration, an
-outcome. An OpenTelemetry exporter is a later slice and needs no schema change.
+outcome — which is what let the OpenTelemetry exporter be a translation and
+nothing more.
 
 `sequence` carries the order, not `created_at`: `now()` is the transaction
 timestamp, so steps written together would share a value and sort arbitrarily.
@@ -41,3 +42,32 @@ timestamp, so steps written together would share a value and sort arbitrarily.
 A caller may pass a `traceId` into both `Router.route` and `Agent.run`, so a
 routing decision and the turn it chose read as one trace instead of two.
 `RouteDecision` returns the id it used, which is the easy way to do it.
+
+## Exporting to OpenTelemetry
+
+`toSpan` turns a step into an OTLP span; `OtlpTraceRecorder` is a decorator that
+batches those to a collector over OTLP/HTTP. Set `OTEL_EXPORTER_OTLP_ENDPOINT`
+and `createHarness` wires it — no code change, because that is the variable the
+rest of an instrumented fleet already reads.
+
+There is no OpenTelemetry SDK dependency. The harness is a library, so its tree
+lands in every product whether or not that product exports anything, and what
+the SDK would add is auto-instrumentation of things the harness does not do. A
+product that wants the SDK still can: `toSpan` is a pure function, so feeding it
+into an exporter this repository has never heard of is a few lines.
+
+Worth knowing:
+
+- **Spans leave as steps are recorded**, not read back from the table later —
+  which is how OTel works, and needs no schema change. Wiring the exporter today
+  does not send yesterday.
+- **The exporter goes inside the redactor**, so what reaches a third party is
+  scrubbed by the same pass as what is stored:
+  `new RedactingTraceRecorder(new OtlpTraceRecorder(store, opts), redactor)`.
+- **Ids are derived, not random** — `sha256(traceId:sequence)` — so a step
+  exported twice is one span, and step 0 is the parent of the rest.
+- **A collector that is down costs a batch, never a turn.** Failures are counted
+  through `onError` and dropped; a full queue drops the oldest rather than
+  growing until the process dies.
+- **`close()` flushes.** `Harness.close()` already calls it, before the pool
+  closes: the last spans of a turn usually explain why the process is going down.

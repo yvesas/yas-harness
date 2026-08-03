@@ -152,6 +152,27 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **Traces export as OpenTelemetry spans, hand-written and live (F6.3).** The
+  `traces` table was already span-shaped by design, so the exporter is a
+  translation: `toSpan` is a pure function of a step, and `OtlpTraceRecorder` a
+  decorator that batches the result to an OTLP/HTTP collector. **No
+  OpenTelemetry SDK.** The harness is a library, so its dependency tree lands in
+  every product whether or not that product exports anything — and what the SDK
+  would buy is auto-instrumentation of things the harness does not do. Three
+  calls worth knowing. **Spans are exported as steps are recorded, not read back
+  from the table**: that is how OTel works, it needs no schema change and no
+  database, and the cost is stated rather than hidden — wiring it on Tuesday
+  does not send Monday. **Ids are derived, never random** — a span id is
+  `sha256(traceId:sequence)` — so re-exporting a step updates a span instead of
+  duplicating it, and a child names its parent with no state held between calls;
+  since step 0 is the turn beginning, it is the root and its id follows from the
+  trace id alone. **A full queue drops the oldest and says so**: telemetry must
+  not be what kills the process it observes, and the newest spans are the ones
+  describing what is happening now. The exporter sits **inside** the redactor,
+  so what leaves for a third party is scrubbed by the same pass as what is
+  stored, and `OTEL_EXPORTER_OTLP_ENDPOINT` wires it — the variable the rest of
+  an instrumented fleet already reads, making it a deployment concern rather
+  than a code change.
 - **The read surface exists, and a real consumer chose its shape (F7.2b).**
   The harness had rich write ports and almost no way to read: no tenant surface
   at all (a product's first action was raw SQL), no way to read a trace or a

@@ -40,6 +40,7 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `UsageRecorder` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
 | `TraceRecorder` / `TraceReader` | `src/telemetry/trace.ts` | `PostgresTraceRecorder`, `InMemoryTraceRecorder` (both ports) |
 | `UsageReader` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
+| `HealthProbe` | `src/lifecycle/health.ts` | `databaseProbe` |
 | `TenantStore` | `src/tenants/tenant-store.ts` | `PostgresTenantStore`, `InMemoryTenantStore` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden
@@ -75,6 +76,7 @@ without a network or an API bill.
 | `src/pools/` | Per-module data pools, and the ask-the-owner flow across them |
 | `src/tenants/` | The isolation boundary: creating, finding and erasing a tenant |
 | `src/telemetry/` | What a turn cost (`model_usage`) and what it did (`traces`) |
+| `src/lifecycle/` | Draining a deploy without dropping the turn in flight, and what `/healthz` and `/readyz` should answer |
 | `src/connections/` | External connectors, connections and the credential vault |
 | `src/connections/connectors/` | Concrete connectors (Confluence, Jira, GitHub, Google Drive, Slack, Notion, Google Calendar, Cal.com, Calendly, Microsoft Teams) and shared Atlassian plumbing |
 | `src/mcp/` | MCP server exposing the connectors as tools (mechanics, no transport) |

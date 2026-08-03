@@ -152,6 +152,26 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **A third-party MCP server is a connector, and its session belongs to one
+  tenant (MCP.3).** The mirror of MCP.2: that direction exposes our connectors
+  as MCP tools, this one consumes somebody else's server as a source, both over
+  the same `Resource` vocabulary. It declares **`list` and `read` only** —
+  MCP's resource primitive has no search and no writes, and a connector that
+  claims a capability it cannot honour fails at the first live call, which is
+  what the registry's check exists to prevent. **MCP is stateful, so a session
+  is credential-scoped**: `initialize` opens it with one tenant's token, and a
+  Streamable HTTP server hands back an id carrying that authorisation. The cache
+  is therefore keyed by tenant *and* connection, never by server — keying by
+  server would hand tenant B a handle opened as tenant A, the exact leak the
+  schema spends a composite key preventing elsewhere. Nothing caches the
+  credential itself, so a refreshed token is in use on the next call and the
+  vault stays the source of truth. **stdio is not shipped**: it means spawning a
+  child process, and a multi-tenant service spawning one per tenant has turned a
+  connection into an execution surface — a product that wants it writes twelve
+  lines against `McpTransport` and owns that. A server's answers are treated as
+  what they are, somebody else's text heading for a model's context: page sizes
+  and content lengths capped, shapes validated, anything unrecognised dropped
+  rather than forwarded.
 - **Liveness checks nothing, and readiness is false before anything closes
   (F6.4/F6.5).** Two questions kept apart. Having `/healthz` ping the database
   is the most damaging mistake available here: a blip fails liveness on every

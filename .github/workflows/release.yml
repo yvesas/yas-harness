@@ -1,0 +1,80 @@
+# Copyright 2026 YAS Softwares LTDA
+# SPDX-License-Identifier: Apache-2.0
+#
+# Publishes the container image when a version tag is pushed. The tag is what
+# triggers a release — see .claude/skills/release-process/.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and publish the image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The only elevated permission, and only in this job.
+      packages: write
+      # Lets the build attach a signed provenance attestation to the image.
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Multi-architecture is not decoration: the stack was chosen so the
+      # harness runs on a Raspberry Pi as readily as on a server, and an
+      # amd64-only image quietly breaks that promise.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # v1.2.3 publishes 1.2.3, 1.2 and 1 — so a consumer can pin as
+          # tightly as they want. `latest` only ever moves on a real release,
+          # never on a pre-release.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Records what built this image, from which commit, so a consumer can
+      # verify it came from this repository rather than someone's laptop.
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

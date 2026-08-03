@@ -105,6 +105,43 @@ jobs:
       - name: Integration tests
         run: npm test
 
+  image:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built on every change and pushed on none. The release workflow is the
+      # only thing that publishes, and it only runs on a tag — so without this
+      # step a broken Dockerfile would stay broken until release day. Single
+      # architecture here: this is checking the build, not shipping it.
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: yas-harness:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # A library image whose entrypoint cannot start is not worth publishing.
+      # An unknown command is the one path that proves the image without a
+      # database: node runs, the script is present, `pg` resolved (it is a
+      # top-level import, so a missing dependency crashes before this line),
+      # and the entrypoint dispatched. A missing module would say so instead.
+      - name: Smoke-test the entrypoint
+        run: |
+          output=$(docker run --rm yas-harness:ci bogus 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -q 'unknown command' || {
+            echo '::error::the image entrypoint did not start'
+            exit 1
+          }
+
   commits:
     name: Commit messages
     runs-on: ubuntu-latest

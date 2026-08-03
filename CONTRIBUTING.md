@@ -42,6 +42,10 @@ written. It is the one rule the whole project depends on.
 The `commit-msg` hook enforces the last two points. Do not bypass it with
 `--no-verify`: CI checks the same rules and your pull request will fail.
 
+You do not need to touch [`CHANGELOG.md`](./CHANGELOG.md) in a pull request —
+it is curated at release time from these commits, which is why the body matters
+more than the subject. Write the *why* there and the changelog writes itself.
+
 ## Pull requests
 
 Every pull request should state:

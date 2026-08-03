@@ -54,6 +54,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Console
+        # `next build` type-checks as it compiles, so this is the console's
+        # typecheck and its build in one step. It runs here because the console
+        # is part of the product now: a change to a harness port that breaks the
+        # page reading it should fail this pull request, not the next person to
+        # open the console.
+        run: npm run console:build
+
       - name: Package
         # Packs, installs into a throwaway project and imports by name. The one
         # thing the test suite cannot catch: every test imports src/ by relative

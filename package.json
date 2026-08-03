@@ -25,6 +25,9 @@
     "scripts/migrate.mjs",
     "NOTICE"
   ],
+  "workspaces": [
+    "console"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -50,7 +53,9 @@
     "boundaries": "node scripts/check-boundaries.mjs",
     "hooks": "git config core.hooksPath .githooks || true",
     "package:check": "node scripts/check-package.mjs",
-    "isolation": "node scripts/check-isolation.mjs"
+    "isolation": "node scripts/check-isolation.mjs",
+    "console": "npm run dev --workspace console",
+    "console:build": "npm run build --workspace console"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

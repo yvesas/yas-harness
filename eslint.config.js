@@ -6,7 +6,10 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**'] },
+  // The console is a workspace with its own toolchain: its own tsconfig (JSX,
+  // DOM lib, bundler resolution) and Next's own linting. Type-checked rules
+  // from this config would run against a program that does not include it.
+  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'console/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {

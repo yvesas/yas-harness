@@ -21,8 +21,8 @@ export class PostgresUsageRecorder implements UsageRecorder, UsageReader {
          tenant_id, session_id, task, model_reference, provider, model, tier,
          input_tokens, output_tokens, cached_input_tokens, cost_usd,
          latency_ms, attempts, succeeded, error_message,
-         compression_before_tokens, compression_after_tokens
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+         compression_before_tokens, compression_after_tokens, billed_to
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [
         usage.tenantId,
         usage.sessionId,
@@ -41,6 +41,10 @@ export class PostgresUsageRecorder implements UsageRecorder, UsageReader {
         usage.errorMessage ?? null,
         usage.compression?.beforeTokens ?? null,
         usage.compression?.afterTokens ?? null,
+        // Defaulted here, not in the caller: a record written before BYOM
+        // existed was the platform's, and so is one from a gateway with no
+        // key resolver wired.
+        usage.billedTo ?? 'platform',
       ],
     );
   }

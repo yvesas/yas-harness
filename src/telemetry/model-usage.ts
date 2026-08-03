@@ -51,7 +51,19 @@ export interface ModelUsageRecord {
   readonly errorMessage?: string;
   /** Absent when no compressor is wired, which is the default posture. */
   readonly compression?: CompressionUsage;
+  /**
+   * Whose money paid (E3). `platform` unless the tenant brought their own key.
+   *
+   * Without it a tenant on their own key is indistinguishable from one on ours,
+   * and `costUsd` would be billed to them twice — once by their provider and
+   * once by us. It stays recorded either way, because what a call *cost* is
+   * worth knowing even when it is not ours to charge for.
+   */
+  readonly billedTo?: BilledTo;
 }
+
+/** Which account a call was charged to. */
+export type BilledTo = 'platform' | 'tenant';
 
 /**
  * Port: where usage records go.

@@ -88,7 +88,7 @@ export class GroqProvider implements ModelProvider {
     this.#fetch = options.fetch ?? globalThis.fetch;
   }
 
-  async invoke({ model, request, signal }: ProviderCall): Promise<ModelResponse> {
+  async invoke({ model, request, signal, apiKey }: ProviderCall): Promise<ModelResponse> {
     const startedAt = performance.now();
 
     const body = {
@@ -114,7 +114,8 @@ export class GroqProvider implements ModelProvider {
       response = await this.#fetch(`${this.#baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${this.#apiKey}`,
+          // The tenant's own key when they brought one (E3), ours otherwise.
+          authorization: `Bearer ${apiKey ?? this.#apiKey}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),

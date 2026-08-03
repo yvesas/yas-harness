@@ -1,0 +1,28 @@
+# Copyright 2026 YAS Softwares LTDA
+# SPDX-License-Identifier: Apache-2.0
+#
+# What never reaches the build context. Two reasons: a smaller context is a
+# faster build, and a secret that is never sent cannot be baked into a layer.
+
+# Secrets, first and loudest.
+.env
+.env.*
+!.env.example
+
+# Reinstalled inside the image; sending the host's is slow and can be the wrong
+# platform's binaries.
+node_modules
+dist
+
+.git
+.github
+.githooks
+.claude
+
+# Nothing the runtime needs.
+tests
+examples
+docs
+coverage
+*.md
+!README.md

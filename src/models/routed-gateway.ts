@@ -10,6 +10,8 @@
  */
 
 import type { ContextCompressor } from '../compression/context-compressor.js';
+import type { Availability, Unavailable } from './availability.js';
+import { InMemoryAvailability, credentialScope, providerScope } from './availability.js';
 import type { SecretRedactor } from '../redaction/secret-redactor.js';
 import type {
   CompressionUsage,
@@ -40,6 +42,14 @@ export interface RoutedGatewayOptions {
   readonly redactor?: SecretRedactor;
   /** Injected in tests so backoff does not make the suite slow. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * Remembers what is broken, so the next request does not rediscover it.
+   * Defaults to an in-process one — it only engages after repeated failures,
+   * so leaving it on costs a healthy deployment nothing.
+   */
+  readonly availability?: Availability;
+  /** Injected in tests; defaults to the wall clock. */
+  readonly now?: () => Date;
 }
 
 const UNATTRIBUTED_TENANT = 'unattributed';
@@ -53,6 +63,8 @@ export class RoutedGateway implements ModelGateway {
   readonly #tenantId: string;
   readonly #redactor: SecretRedactor;
   readonly #sleep: (ms: number) => Promise<void>;
+  readonly #availability: Availability;
+  readonly #now: () => Date;
 
   constructor(options: RoutedGatewayOptions) {
     this.#config = options.config;
@@ -63,6 +75,8 @@ export class RoutedGateway implements ModelGateway {
     // No redactor in tests means log as-is; production always wires the real one.
     this.#redactor = options.redactor ?? { redact: (text) => text };
     this.#sleep = options.sleep ?? defaultSleep;
+    this.#availability = options.availability ?? new InMemoryAvailability();
+    this.#now = options.now ?? (() => new Date());
 
     // A route pointing at a provider nobody registered is a wiring mistake
     // that would otherwise surface only when that fallback is finally needed.
@@ -86,16 +100,28 @@ export class RoutedGateway implements ModelGateway {
     const recorded = compression ? { compression } : {};
 
     const candidates = candidatesFor(this.#config, outgoing.task);
+    const tenantId = outgoing.attribution?.tenantId ?? this.#tenantId;
     let attempts = 0;
     let lastError: ModelGatewayError | undefined;
+    const skipped: Unavailable[] = [];
 
     for (const candidate of candidates) {
+      // Skipping is the whole point: a provider known to be down should not be
+      // rediscovered, with a full timeout, on every request of every turn.
+      const unavailable = this.#unavailable(candidate, tenantId);
+      if (unavailable) {
+        skipped.push(unavailable);
+        continue;
+      }
+
       for (let attempt = 1; attempt <= this.#config.attemptsPerModel; attempt += 1) {
         attempts += 1;
         const startedAt = performance.now();
 
         try {
           const response = await this.#invoke(candidate, outgoing);
+          this.#availability.recordSuccess(providerScope(candidate.provider));
+          this.#availability.recordSuccess(credentialScope(tenantId, candidate.reference));
           await this.#record(candidate, outgoing, {
             usage: response.usage,
             latencyMs: response.latencyMs,
@@ -123,6 +149,19 @@ export class RoutedGateway implements ModelGateway {
           if (!failure.detail.retryable) {
             throw failure;
           }
+
+          this.#remember(candidate, tenantId, failure);
+
+          // A rate-limited key is still rate-limited a second later, so trying
+          // the same model again spends a retry to learn nothing. Move on.
+          if (failure.kind === 'credential') {
+            break;
+          }
+          // The provider just crossed its threshold; further attempts here
+          // would be the very requests the memory exists to stop.
+          if (this.#unavailable(candidate, tenantId)) {
+            break;
+          }
           if (attempt < this.#config.attemptsPerModel) {
             await this.#sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1));
           }
@@ -130,11 +169,45 @@ export class RoutedGateway implements ModelGateway {
       }
     }
 
+    // What was skipped belongs in the message: "no candidates" would send an
+    // operator hunting for a routing bug when the answer is that everything is
+    // in cooldown, and until when.
+    const because = skipped
+      .map((entry) => `${entry.scope} until ${entry.until.toISOString()} (${entry.reason})`)
+      .join('; ');
+    const detail = lastError?.message ?? (because === '' ? 'no candidates' : `skipped ${because}`);
+
     throw new ModelGatewayError(
-      `every model for task "${outgoing.task}" failed after ${attempts} attempt(s): ${lastError?.message ?? 'no candidates'}`,
+      `every model for task "${outgoing.task}" failed after ${attempts} attempt(s): ${detail}`,
       { provider: 'routed', task: outgoing.task, retryable: true },
       lastError ? { cause: lastError } : {},
     );
+  }
+
+  /** Whichever memory is holding this candidate back — the provider's or the key's. */
+  #unavailable(candidate: ResolvedCandidate, tenantId: string): Unavailable | null {
+    const now = this.#now();
+    return (
+      this.#availability.blocked(providerScope(candidate.provider), now) ??
+      this.#availability.blocked(credentialScope(tenantId, candidate.reference), now)
+    );
+  }
+
+  /** Charge the failure to whoever it belongs to. */
+  #remember(candidate: ResolvedCandidate, tenantId: string, failure: ModelGatewayError): void {
+    const scope =
+      failure.kind === 'credential'
+        ? credentialScope(tenantId, candidate.reference)
+        : providerScope(candidate.provider);
+
+    this.#availability.recordFault(scope, {
+      kind: failure.kind,
+      reason: failure.message,
+      now: this.#now(),
+      ...(failure.detail.retryAfterMs === undefined
+        ? {}
+        : { retryAfterMs: failure.detail.retryAfterMs }),
+    });
   }
 
   /**

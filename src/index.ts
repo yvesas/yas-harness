@@ -430,6 +430,7 @@ export { AnthropicProvider } from './models/anthropic-provider.js';
 export { GroqProvider } from './models/groq-provider.js';
 export { ModelGatewayError } from './models/model-gateway.js';
 export type {
+  FailureKind,
   ModelGateway,
   ModelRequest,
   ModelResponse,
@@ -441,6 +442,13 @@ export type { ModelProvider, ProviderCall } from './models/model-provider.js';
 export type { TokenCounter } from './models/token-counter.js';
 export { GptTokenizerCounter } from './models/gpt-tokenizer-counter.js';
 export { RoutedGateway } from './models/routed-gateway.js';
+export { InMemoryAvailability, credentialScope, providerScope } from './models/availability.js';
+export type {
+  Availability,
+  AvailabilityPolicy,
+  RecordedFault,
+  Unavailable,
+} from './models/availability.js';
 export { ScriptedGateway, callsTool, says } from './models/scripted-gateway.js';
 export { loadModelConfig, parseModelConfig } from './models/routing.js';
 export type { ModelConfig, ModelEntry, ModelTier } from './models/routing.js';

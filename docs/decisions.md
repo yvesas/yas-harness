@@ -96,6 +96,28 @@ ADR instead.
   (`light`/`medium` stay lossless). Secret redaction is deliberately **not** here:
   it is security, must always run, and must never be a discardable engine — it
   belongs on the persistence/log path (a separate slice), not the cost pipeline.
+- **The gateway remembers what is broken, at the granularity of whose fault it
+  is (F6.7).** Retry and fallback worked but had no memory, so a provider down
+  for an hour was still tried — and retried with backoff — on *every* request,
+  each one paying the full timeout before the fallback it always needed. The
+  memory is split because `retryable` cannot answer the question that matters:
+  a **5xx or timeout is the provider's**, which is not a fact about one tenant,
+  so that scope is global; a **429 is this key's**, which under BYOM is
+  literally a different key per tenant, so that scope is `(tenant, model)`.
+  Backing off the wrong one either punishes tenants who are fine or keeps
+  hammering a provider that is down. Two behaviours follow: a rate-limited model
+  is **not** retried immediately (the same key is still limited a second later,
+  so the attempt buys nothing), and the provider's own `Retry-After` beats any
+  cooldown we would compute, because it knows when its window resets. Recovery
+  is a **half-open probe**, not a clock — when the cooldown expires exactly one
+  request goes through as a test; success clears the memory, failure doubles the
+  wait to a ceiling — so a provider still down costs one request per cooldown
+  rather than all of them. A *rejected* request never trips anything: a bad
+  request says nothing about a provider's health, and counting it would take a
+  healthy provider out of service. The state is **in process on purpose**: it
+  describes the last few seconds of a running gateway, and a restart should
+  rediscover it rather than inherit a stale verdict — `Availability` is an
+  interface so a deployment that wants it shared can implement one.
 - **Isolation is checked in the schema and across both adapters (F7.3).** Every
   table already carried `tenant_id` and every cross-table key was already
   composite — the risk was never the tables that exist, which have their own

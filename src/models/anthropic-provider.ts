@@ -224,16 +224,40 @@ function toUsage(usage: Anthropic.Usage): TokenUsage {
  * request is not. The distinction is what the fallback strategy will act on.
  */
 function toGatewayError(error: unknown, task: TaskKind): ModelGatewayError {
+  // A rate limit is this key's problem; a 5xx or a dropped connection is the
+  // provider's. Both are worth retrying, but backing off the wrong one either
+  // punishes tenants who are fine or keeps hammering a provider that is down.
+  const rateLimited = error instanceof Anthropic.RateLimitError;
   const retryable =
-    error instanceof Anthropic.RateLimitError ||
+    rateLimited ||
     error instanceof Anthropic.InternalServerError ||
     error instanceof Anthropic.APIConnectionError;
 
   const message = error instanceof Error ? error.message : String(error);
+  const retryAfterMs = rateLimited ? retryAfterFrom(error) : undefined;
 
   return new ModelGatewayError(`anthropic request failed: ${message}`, {
     provider: PROVIDER,
     task,
     retryable,
+    kind: rateLimited ? 'credential' : retryable ? 'provider' : 'request',
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   });
+}
+
+/**
+ * The provider's own answer to "how long", when it gave one. Its header beats
+ * any cooldown we would compute: it knows when the window resets.
+ */
+function retryAfterFrom(error: unknown): number | undefined {
+  const headers = (error as { headers?: unknown }).headers;
+  const value =
+    headers instanceof Headers
+      ? headers.get('retry-after')
+      : typeof headers === 'object' && headers !== null
+        ? ((headers as Record<string, unknown>)['retry-after'] ?? null)
+        : null;
+
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
 }

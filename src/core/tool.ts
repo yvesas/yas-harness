@@ -104,6 +104,23 @@ export class ToolRegistry {
     }));
   }
 
+  /**
+   * What is registered, for an operator surface rather than a model.
+   *
+   * Separate from `schemas()` because the two audiences want opposite things.
+   * A model needs the input schema and must **not** be told which tools are
+   * gated — that is a fact about the humans behind the tool, and offering it
+   * invites the model to reason about the gate instead of about the task. A
+   * person needs to see the gate and does not need the JSON Schema.
+   */
+  list(): { name: string; description: string; requiresApproval: boolean }[] {
+    return [...this.#tools.values()].map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      requiresApproval: tool.requiresApproval === true,
+    }));
+  }
+
   requiresApproval(name: string): boolean {
     return this.#tools.get(name)?.requiresApproval === true;
   }

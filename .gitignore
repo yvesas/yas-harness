@@ -4,6 +4,8 @@ node_modules/
 # build output
 dist/
 *.tsbuildinfo
+console/.next/
+console/next-env.d.ts.bak
 
 # test output
 coverage/

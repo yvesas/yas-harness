@@ -237,6 +237,20 @@ describe('OTLP export', () => {
     expect(sink.requests[0]?.url).toBe('http://collector:4318/v1/traces');
   });
 
+  it('trims trailing slashes without a regex that can be made to crawl', async () => {
+    const sink = collector();
+    const recorder = new OtlpTraceRecorder(undefined, {
+      endpoint: `http://collector:4318${'/'.repeat(50_000)}`,
+      send: sink.send,
+    });
+
+    // /\/+$/ backtracks polynomially on a run of slashes, and the endpoint
+    // comes from configuration. Answering at all is the assertion.
+    await recorder.record(step());
+    await recorder.flush();
+    expect(sink.requests[0]?.url).toBe('http://collector:4318/v1/traces');
+  });
+
   it('leaves an endpoint that already names the path alone', async () => {
     const sink = collector();
     const recorder = new OtlpTraceRecorder(undefined, {

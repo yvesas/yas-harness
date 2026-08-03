@@ -30,7 +30,7 @@ and they live in the modules that products register.
 | Central router | Picks the module that handles a given input, using a cheap model |
 | Module registry | A module declares what it does and which tools it exposes |
 | Connection layer | OAuth with token refresh, encrypted credentials, per-tenant isolation |
-| Human approval | Any action can require an explicit OK before it runs |
+| Human approval | Any tool the agent runs can require an explicit OK first |
 | Model gateway | Cheap / premium / bring-your-own-model, routed by task kind, with fallback |
 | Memory | Conversation context that survives restarts |
 | Pools & permissions | Each module owns its data; cross-module access is asked for, never taken |
@@ -123,7 +123,13 @@ takes, and the decisions behind them — see [`docs/`](./docs/):
 Credentials are encrypted and **the agent never sees API keys** — the
 connection layer resolves them at call time, and the agent sees only method
 names and results. Inbound messages from any channel are treated as untrusted
-input. Destructive actions require human approval.
+input.
+
+A tool the agent runs can be marked `requiresApproval`: the turn then pauses
+before running anything and waits for a person, and fails closed if no approval
+queue is wired. **That gate belongs to the agent loop.** Connector writes
+exposed over MCP do not pass through it — which is why they are off by default
+and a product has to opt in deliberately, one capability at a time.
 
 To report a vulnerability, read [SECURITY.md](./SECURITY.md) — please do not
 open a public issue.

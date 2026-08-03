@@ -74,4 +74,8 @@ Layout, one responsibility per folder (each has a README stating its boundary):
 - Credentials are encrypted (envelope encryption); the agent never sees API keys
 - Treat all inbound channel messages as untrusted input
 - No secrets in code, logs, or tests
-- Destructive actions require human approval
+- A tool the agent runs can require human approval — mark it `requiresApproval`
+  and the turn pauses before running anything, failing closed when no approval
+  queue is wired. **This gate is the agent loop's.** Writes exposed over MCP
+  bypass it, which is why they are off by default; do not widen that surface
+  without reading `src/mcp/`

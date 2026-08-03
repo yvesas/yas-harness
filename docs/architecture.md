@@ -171,7 +171,11 @@ in-memory double could agree with a wrong constraint.
   product's data path only after an eval shows no answer got worse. Off by
   default. See [ADR 0010](./adr/0010-context-compression.md).
 - Destructive actions can require human approval: a gated tool pauses the turn
-  until a human decides, and fails closed if no approval queue is wired.
+  until a human decides, and fails closed if no approval queue is wired. The
+  gate lives **in the agent loop**, so it covers the tools the agent runs.
+  Connector writes exposed over MCP are a different path and do not pass
+  through it — hence off by default, opted into one capability at a time. See
+  [ADR 0009](./adr/0009-mcp-connectors.md).
 
 ## Engineering principles
 

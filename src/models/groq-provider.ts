@@ -263,10 +263,19 @@ function toUsage(usage: ChatCompletion['usage']): TokenUsage {
 
 async function toHttpError(response: Response, task: TaskKind): Promise<ModelGatewayError> {
   const body = await response.text().catch(() => '');
+  const retryable = RETRYABLE_STATUS.has(response.status);
+  // 429 is this key's quota; 5xx is the provider. Backing off the wrong one
+  // either punishes tenants who are fine or hammers a provider that is down.
+  const credential = response.status === 429;
+  const seconds = Number(response.headers.get('retry-after'));
+  const retryAfterMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
+
   return new ModelGatewayError(`groq responded ${response.status}: ${body.slice(0, 500)}`, {
     provider: PROVIDER,
     task,
-    retryable: RETRYABLE_STATUS.has(response.status),
+    retryable,
+    kind: credential ? 'credential' : retryable ? 'provider' : 'request',
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   });
 }
 

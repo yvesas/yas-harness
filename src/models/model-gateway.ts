@@ -146,6 +146,22 @@ export interface ModelGateway {
 }
 
 /** Every provider failure reaches the core as this, never as a provider type. */
+/**
+ * Whose fault a retryable failure is — which decides *what* to back off from.
+ *
+ * `retryable` alone cannot answer that: a 500 and a 429 are both worth another
+ * attempt, but a provider outage affects everyone and a quota belongs to one
+ * caller's key. Backing off the wrong one either punishes tenants who are fine
+ * or keeps hammering a provider that is down.
+ */
+export type FailureKind =
+  /** The provider is unwell: 5xx, a timeout, a connection that never landed. */
+  | 'provider'
+  /** This caller's credential: a rate limit or a quota it has exhausted. */
+  | 'credential'
+  /** The request itself was refused, and will be refused again. */
+  | 'request';
+
 export class ModelGatewayError extends Error {
   constructor(
     message: string,
@@ -154,11 +170,20 @@ export class ModelGatewayError extends Error {
       readonly task: TaskKind;
       /** True for rate limits, timeouts and provider outages. */
       readonly retryable: boolean;
+      /** Defaults to `provider` when retryable, `request` when not. */
+      readonly kind?: FailureKind;
+      /** From the provider's `Retry-After`, when it said one. */
+      readonly retryAfterMs?: number;
     },
     options?: { cause?: unknown },
   ) {
     super(message, options);
     this.name = 'ModelGatewayError';
+  }
+
+  /** The kind, resolved: adapters that do not classify still get a sane answer. */
+  get kind(): FailureKind {
+    return this.detail.kind ?? (this.detail.retryable ? 'provider' : 'request');
   }
 }
 

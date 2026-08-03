@@ -41,6 +41,7 @@ Layout, one responsibility per folder (each has a README stating its boundary):
 | `src/memory/` | Session and conversation context |
 | `src/pools/` | Per-module data pools and cross-module permissions |
 | `src/telemetry/` | Traces and cost accounting |
+| `src/lifecycle/` | Graceful shutdown and health answers (no endpoints) |
 
 ## Conventions
 

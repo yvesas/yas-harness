@@ -152,6 +152,22 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **Liveness checks nothing, and readiness is false before anything closes
+  (F6.4/F6.5).** Two questions kept apart. Having `/healthz` ping the database
+  is the most damaging mistake available here: a blip fails liveness on every
+  replica at once, the orchestrator kills all of them, and since restarting a
+  pod does not fix a database, a recoverable outage becomes a crash loop — the
+  platform amplifying the fault instead of absorbing it. So liveness asks only
+  whether the process is wedged, and dependencies live in readiness, where
+  failing means being pulled from the load balancer and left running to recover
+  on its own. Readiness is also false the moment draining begins, **before** the
+  pool closes: that ordering is what makes a shutdown graceful, because closing
+  first fails every in-flight turn with a connection error that reads in the
+  logs as a database problem rather than as a deploy. A session already survived
+  a restart by living in Postgres; what a restart lost was the turn in flight,
+  which is what `Lifecycle.run` now holds a deploy open for. **No endpoints and
+  no signal handler by default** — a product owns its transport, and a library
+  that hooks `SIGTERM` on import has taken over a process it does not own.
 - **Traces export as OpenTelemetry spans, hand-written and live (F6.3).** The
   `traces` table was already span-shaped by design, so the exporter is a
   translation: `toSpan` is a pure function of a step, and `OtlpTraceRecorder` a

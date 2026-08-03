@@ -59,6 +59,8 @@ import type { TenantStore } from './tenants/tenant-store.js';
 import { Router } from './router/router.js';
 import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
+import { databaseProbe, type HealthProbe } from './lifecycle/health.js';
+import { Lifecycle } from './lifecycle/shutdown.js';
 import { OtlpTraceRecorder, type OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
 import { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
 import { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
@@ -118,6 +120,19 @@ export interface Harness {
    * writes construct their own `McpServer` with `allow`.
    */
   readonly mcpServer: McpServer | null;
+  /**
+   * What is running, and whether more may start. Wrap each turn in
+   * `lifecycle.run` and a deploy stops dropping the turn in flight; pass it to
+   * `readiness` and the pod goes out of the load balancer before anything
+   * closes. See `src/lifecycle/`.
+   */
+  readonly lifecycle: Lifecycle;
+  /**
+   * What `readiness` should check for this harness — the database, today.
+   * Built here because the pool is not otherwise handed out. A product appends
+   * its own probes; **liveness takes none of them**, on purpose.
+   */
+  readonly probes: readonly HealthProbe[];
   close(): Promise<void>;
 }
 
@@ -160,6 +175,11 @@ export interface HarnessOptions {
    * `{ endpoint: '' }` to keep it off regardless of the environment.
    */
   readonly otlp?: Partial<OtlpExportOptions>;
+  /**
+   * Share one lifecycle with the rest of a product, so a single drain covers
+   * the harness's turns and whatever else is in flight. Defaults to its own.
+   */
+  readonly lifecycle?: Lifecycle;
 }
 
 /**
@@ -308,6 +328,8 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     resourceCache,
     cachedConnections,
     mcpServer,
+    lifecycle: options.lifecycle ?? new Lifecycle(),
+    probes: [databaseProbe(pool)],
     close: async () => {
       // Spans first: the last steps of a turn are usually the ones explaining
       // why the process is going down, and they are lost once the queue is.
@@ -520,6 +542,21 @@ export { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js'
 export { OtlpTraceRecorder } from './telemetry/otlp-trace-recorder.js';
 export type { OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
 export { toOtlpPayload, toSpan, toSpanId, toTraceId } from './telemetry/otlp.js';
+export { Lifecycle, NotAcceptingError, handleShutdownSignals } from './lifecycle/shutdown.js';
+export type {
+  DrainOptions,
+  DrainResult,
+  LifecycleOptions,
+  ShutdownSignalOptions,
+} from './lifecycle/shutdown.js';
+export { databaseProbe, liveness, readiness } from './lifecycle/health.js';
+export type {
+  HealthProbe,
+  HealthReport,
+  ProbeReport,
+  Queryable,
+  ReadinessOptions,
+} from './lifecycle/health.js';
 export type {
   OtlpAttribute,
   OtlpSpan,

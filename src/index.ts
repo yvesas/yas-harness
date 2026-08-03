@@ -542,6 +542,21 @@ export { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js'
 export { OtlpTraceRecorder } from './telemetry/otlp-trace-recorder.js';
 export type { OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
 export { toOtlpPayload, toSpan, toSpanId, toTraceId } from './telemetry/otlp.js';
+export { McpConnector } from './connections/connectors/mcp-connector.js';
+export type { McpConnectorOptions } from './connections/connectors/mcp-connector.js';
+export { McpClient, McpClientError } from './mcp/mcp-client.js';
+export type {
+  McpCallContext,
+  McpClientOptions,
+  McpResource,
+  McpResourceContents,
+  McpResourcePage,
+  McpSession,
+  McpTransport,
+  McpTransportResponse,
+} from './mcp/mcp-client.js';
+export { HttpMcpTransport } from './mcp/http-mcp-transport.js';
+export type { HttpMcpTransportOptions } from './mcp/http-mcp-transport.js';
 export { Lifecycle, NotAcceptingError, handleShutdownSignals } from './lifecycle/shutdown.js';
 export type {
   DrainOptions,

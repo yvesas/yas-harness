@@ -178,4 +178,35 @@ Then `npm run console`, open **Connections**, and click connect.
 - **"could not store the credential"** — the connection was undone on purpose;
   the master key or the database is the thing to look at.
 
-Still to come: Approvals (2), Playground (3), Config (4), Evals (5).
+## Approvals (phase 2)
+
+The inbox, and the decision. It closes the loop the harness was built for:
+*connect → recommend → **you approve** → execute.*
+
+Phase 2 asked for `ApprovalStore.pending(tenantId)` — the third gap a page has
+found. `list` answers about one conversation, which is only useful to somebody
+who already knows which conversation to look at, and a person deciding does not.
+Oldest first: each row is a turn parked mid-flight with somebody waiting.
+
+The detail page shows three things, and needs all three. The tool, **the exact
+input it would run with**, and a link to the turn that led here. A queue showing
+only a tool name asks people to approve a verb, and a reviewer who cannot see
+the input is a rubber stamp with extra steps.
+
+The input is rendered as stored. It was scrubbed by the redactor on the way in,
+and scrubbing again on the way out would hide the difference between "the secret
+was caught" and "the display is hiding it" — on the one screen where a person is
+vouching for exactly these bytes.
+
+A rejection should carry a reason and an approval need not. "No" is the answer
+somebody has to act on: the agent relays it, and a person on the other end needs
+to know whether to rephrase, wait, or give up. An MCP rejection with no reason
+gets retried forever.
+
+**Who decided is honest about not knowing.** There is no login, so `decided_by`
+records that the decision came through this console rather than inventing a
+name — an audit trail's whole value is being true. `CONSOLE_OPERATOR` lets a
+deployment say something real. Same seam as `currentTenant`: when authentication
+arrives, one function changes.
+
+Still to come: Playground (3), Config (4), Evals (5).

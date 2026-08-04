@@ -61,6 +61,39 @@ describe.skipIf(!DATABASE_URL)('PostgresApprovalStore', () => {
     expect(found?.input).toEqual({ path: '/x' });
   });
 
+  it('gathers what is waiting across conversations, oldest first', async () => {
+    const sessionB = await createSession(pool, tenantA);
+    await store.request([req('call-1', 'send_email')]);
+    await store.request([
+      {
+        tenantId: tenantA,
+        sessionId: sessionB,
+        toolCallId: 'call-2',
+        toolName: 'delete_file',
+        input: {},
+      },
+    ]);
+
+    const waiting = await store.pending(tenantA);
+
+    // The inbox the console needs: one tenant, every conversation, and the
+    // longest-blocked turn first.
+    expect(waiting.map((approval) => approval.toolName)).toEqual(['send_email', 'delete_file']);
+  });
+
+  it('drops an approval from the inbox the moment it is decided', async () => {
+    const [created] = await store.request([req('call-1')]);
+    await store.approve(tenantA, created!.id, { decidedBy: 'yves' });
+
+    expect(await store.pending(tenantA)).toHaveLength(0);
+  });
+
+  it('never shows one tenant what another is waiting on', async () => {
+    await store.request([req('call-1')]);
+
+    expect(await store.pending(tenantB)).toHaveLength(0);
+  });
+
   it('approves atomically and refuses a second decision', async () => {
     const [created] = await store.request([req('call-1')]);
 

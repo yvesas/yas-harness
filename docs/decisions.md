@@ -152,6 +152,28 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **An MCP write is gated by refusing, and the approval is for those arguments
+  (MCP.4).** The agent loop's gate pauses a turn; MCP has no turn, so it cannot
+  be reused — a request that has not been answered is one timing out on a
+  socket. A gated call therefore creates a `pending` approval, **does not run**,
+  and tells the client to call again once somebody has decided. Refusing is the
+  mechanism rather than a failure mode: retrying is ordinary MCP behaviour. The
+  request's identity is a **hash of the tool name and its canonical arguments**
+  — necessary, because the protocol hands out no id that survives a retry, and
+  load-bearing, because keying on the tool alone would let a client get approval
+  for something harmless and then send something else. Keys are sorted before
+  hashing so a reordered payload does not ask a person twice; array order is
+  kept, since there order is meaning. **Enabling a write is now a decision that
+  has to be written down**: `allow` with a write and no `approvals` throws at
+  construction unless the product passes `ungated: true` — at construction, not
+  at the first write, because a check that fires the day somebody deletes
+  something is not a check. Two things deliberately not done: **an approval is
+  not consumed** (`approved` is terminal, so the identical call can be replayed;
+  single use needs a column and a migration, and the exposure is bounded by
+  being identical), and **`approvals.session_id` stays `NOT NULL`** — the
+  product supplies a long-lived anchor session per tenant, because making the
+  column nullable would break the transitive tenant anchoring `npm run
+  isolation` enforces, trading a schema guarantee for a convenience.
 - **Spend reads back grouped, and the page that asked shaped the port (F6.6).**
   `spend()` stays — "what has this tenant cost" has one honest answer — and
   `breakdown()` answers "where did it go", by model, task, day or session,

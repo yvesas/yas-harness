@@ -16,6 +16,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'coverage', '.git']);
+/**
+ * Generated files, which a tool rewrites and would strip a header from.
+ *
+ * `next-env.d.ts` is written by every `next build`, so a header put there does
+ * not survive. It is gitignored for the same reason; this list is what keeps
+ * the check from depending on whether a build happened to have run first.
+ */
+const GENERATED_FILES = new Set(['console/next-env.d.ts']);
 const CHECKED_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.sql']);
 
 const COPYRIGHT = 'Copyright 2026 YAS Softwares LTDA';
@@ -33,7 +41,10 @@ async function* sourceFiles(dir) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       yield* sourceFiles(full);
-    } else if (CHECKED_EXTENSIONS.has(extname(entry.name))) {
+    } else if (
+      CHECKED_EXTENSIONS.has(extname(entry.name)) &&
+      !GENERATED_FILES.has(relative(ROOT, full))
+    ) {
       yield full;
     }
   }

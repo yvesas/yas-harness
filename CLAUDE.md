@@ -85,6 +85,10 @@ Layout, one responsibility per folder (each has a README stating its boundary):
 - No secrets in code, logs, or tests
 - A tool the agent runs can require human approval — mark it `requiresApproval`
   and the turn pauses before running anything, failing closed when no approval
-  queue is wired. **This gate is the agent loop's.** Writes exposed over MCP
-  bypass it, which is why they are off by default; do not widen that surface
-  without reading `src/mcp/`
+  queue is wired
+- Writes exposed over **MCP** are gated differently, because MCP has no turn to
+  pause: a gated call is **refused and recorded**, and runs only when the client
+  calls again after a person decides. The approval is for *those arguments*, so
+  changing the input asks again. Enabling a write in `allow` without wiring
+  `approvals` throws unless the product says `ungated: true` — do not reach for
+  that flag to make an error go away

@@ -167,7 +167,13 @@ describe('McpServer — tools/list policy', () => {
   });
 
   it('lists write tools when they are allowed', async () => {
-    const { server } = build({ allow: ['list', 'read', 'search', 'create', 'update', 'delete'] });
+    // `ungated` because this is about `allow` shaping the tool list, not about
+    // the gate. Enabling a write without deciding who asks now throws — see
+    // mcp-approval.test.ts.
+    const { server } = build({
+      allow: ['list', 'read', 'search', 'create', 'update', 'delete'],
+      ungated: true,
+    });
 
     const res = asSuccess(await server.handle(req(1, 'tools/list'), ctx));
     const names = (res.result as { tools: { name: string }[] }).tools.map((t) => t.name);
@@ -229,7 +235,7 @@ describe('McpServer — tools/call', () => {
   });
 
   it('runs a write tool when allowed', async () => {
-    const { server, ops } = build({ allow: ['create'] });
+    const { server, ops } = build({ allow: ['create'], ungated: true });
 
     await server.handle(
       req(1, 'tools/call', {

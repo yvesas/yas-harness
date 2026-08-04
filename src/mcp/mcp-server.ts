@@ -17,8 +17,13 @@
  * line: every call is tenant-scoped, so a session cannot reach another tenant's
  * connections; and writes are off by default (`allow` is read-only), so
  * exposing a source over MCP does not silently hand out create/update/delete.
- * Wiring MCP writes through the human-approval queue is a later step; until
- * then, opting into writes is a deliberate act by the product.
+ *
+ * Enabling a write now requires saying what gates it. Either wire the approval
+ * queue (`approvals`, see `mcp-approval.ts`) or declare `ungated: true` and
+ * accept that nobody is asked. The constructor refuses to do neither, because
+ * the failure it prevents is the silent one: a product turning on `create` to
+ * try something, and shipping with an unattended write surface it never decided
+ * to have.
  */
 
 import { z } from 'zod';
@@ -31,6 +36,7 @@ import type {
   ResourcePatch,
   SearchOptions,
 } from '../connections/connector.js';
+import { McpApprovalGate, type McpApprovalOptions } from './mcp-approval.js';
 import type { JsonRpcRequest, JsonRpcResponse, McpToolDefinition } from './protocol.js';
 import { ErrorCode, MCP_PROTOCOL_VERSION, errorResponse, success, textResult } from './protocol.js';
 
@@ -47,6 +53,34 @@ export interface McpServerOptions {
    * product enables writes deliberately by listing create/update/delete.
    */
   readonly allow?: readonly ConnectorCapability[];
+  /**
+   * Send gated calls through the human-approval queue.
+   *
+   * MCP has no turn to pause, so a gated call is **refused and recorded**: the
+   * client is told it is awaiting approval, a person decides, and the client
+   * calls again. See `mcp-approval.ts` for why that is the only honest shape.
+   */
+  readonly approvals?: McpApprovalOptions;
+  /**
+   * Expose writes with nobody asked.
+   *
+   * Required, and named to be uncomfortable, when `allow` includes a write and
+   * `approvals` is absent. It is a legitimate choice — a server reachable only
+   * by an operator on a socket nobody else can open — but it should be a
+   * sentence somebody wrote, not a default nobody noticed.
+   */
+  readonly ungated?: boolean;
+}
+
+/** Raised when writes are exposed with neither an approval queue nor a decision. */
+export class McpUngatedWriteError extends Error {
+  constructor(capabilities: readonly ConnectorCapability[]) {
+    super(
+      `MCP would expose ${capabilities.join(', ')} with no approval queue. ` +
+        'Pass `approvals` to gate them, or `ungated: true` to accept that nobody is asked.',
+    );
+    this.name = 'McpUngatedWriteError';
+  }
 }
 
 const READ_ONLY: readonly ConnectorCapability[] = ['list', 'read', 'search'];
@@ -158,6 +192,7 @@ export class McpServer {
   readonly #version: string;
   readonly #allow: ReadonlySet<ConnectorCapability>;
   readonly #tools: Map<string, McpTool>;
+  readonly #approvals: McpApprovalGate | null;
 
   constructor(ops: ConnectionOperations, options: McpServerOptions = {}) {
     this.#ops = ops;
@@ -167,6 +202,16 @@ export class McpServer {
     this.#tools = new Map(
       TOOLS.filter((t) => this.#allow.has(t.capability)).map((t) => [t.name, t]),
     );
+    this.#approvals = options.approvals ? new McpApprovalGate(options.approvals) : null;
+
+    // Fails at construction, not at the first write. A wiring mistake that only
+    // surfaces the day somebody deletes something is not a check.
+    const ungated = [...this.#allow].filter(
+      (capability) => !READ_ONLY.includes(capability) && !this.#approvals?.gates(capability),
+    );
+    if (ungated.length > 0 && options.ungated !== true) {
+      throw new McpUngatedWriteError(ungated);
+    }
   }
 
   /**
@@ -234,6 +279,16 @@ export class McpServer {
       // Bad arguments come back as a tool result, so an agent client sees the
       // message and can correct the call, as native tools do.
       return success(id, textResult(`invalid arguments: ${zodMessage(args.error)}`, true));
+    }
+
+    // Refuse and record: MCP has no turn to pause, so a gated call is answered
+    // with the id of the approval it created and does not run. The client makes
+    // the same call again once a person has decided.
+    if (this.#approvals?.gates(tool.capability)) {
+      const outcome = await this.#approvals.check(context.tenantId, tool.name, args.data);
+      if (outcome.decision === 'refuse') {
+        return success(id, textResult(outcome.message, true));
+      }
     }
 
     try {

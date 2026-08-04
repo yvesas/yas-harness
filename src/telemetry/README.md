@@ -71,3 +71,22 @@ Worth knowing:
   growing until the process dies.
 - **`close()` flushes.** `Harness.close()` already calls it, before the pool
   closes: the last spans of a turn usually explain why the process is going down.
+
+## Reading spend back
+
+`spend()` answers "what has this tenant cost" with one number, because that is a
+question with one honest answer. `breakdown()` answers "where did it go" —
+grouped by **model**, **task**, **day** (UTC) or **session**, dearest first.
+
+Two details worth knowing:
+
+- **The dimension is a lookup, never interpolation.** It reaches SQL through a
+  fixed table of expressions, because this is the query an operator surface
+  drives from a URL.
+- **A row with no key is excluded, not bucketed.** A call made outside a
+  conversation belongs to no session, and gathering those under "none" would put
+  the biggest, unclickable row at the top of the page. They stay in the total.
+
+`savings()` returns **null** when compression never ran, which is a different
+answer from it having saved nothing — and it reports both token counts rather
+than a ratio, since a ratio hides how much of the traffic compression touched.

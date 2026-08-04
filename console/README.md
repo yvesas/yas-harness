@@ -62,10 +62,11 @@ Read-only: **Overview**, **Traces** (list and one turn step by step), **Cost**,
 **Modules**. Plus the two demonstration modules the pages need — `notes` and
 `links` — which are also the only place this console presses on the Golden Rule.
 
-The **Cost** page states what it cannot show (per model, per day, per session)
-rather than rendering the one aggregate as though it were the whole story. That
-gap is F6.6, and leaving the page to ask for it is deliberate: a port added
-because a page might one day want it is a port shaped by a guess.
+The **Cost** page asked for what it could not show, and got it: `UsageReader`
+grew `breakdown` (by model, task, day and session) and `savings`. That is
+**F6.6**, and it is the method rather than an exception — a port shaped by the
+consumer that needed it, not by a guess about what a consumer might one day
+want.
 
 Still to come: Connections (phase 1), Approvals (2), Playground (3), Config (4),
 Evals (5).

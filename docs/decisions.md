@@ -152,6 +152,27 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **Finishing an OAuth flow is a port, and the client secret never leaves it
+  (console phase 1).** The harness had both ends — `OAuthClient` for the
+  mechanics, `ConnectionStore` and `CredentialVault` for the storage — and
+  nothing joining them. The absence only showed up when something had to
+  actually run a flow, which is the console's Connections page. So
+  `ConnectionOnboarding`: authorization URL in, stored connection with a sealed
+  credential out. Callers name a **connector**, never receive an
+  `OAuthProvider`, because handing one out would put a client secret in every
+  surface that renders a "connect" button. **A connection with no credential
+  must not exist**: if sealing fails after the row is written, the row is
+  removed — one that looks connected and cannot authenticate fails later, at a
+  call, and reads as the source being down. Scopes recorded are the ones the
+  provider **granted**, not the ones requested, since a person can decline part
+  of a consent screen. On the console side, `state` is 32 random bytes in an
+  HttpOnly cookie compared against the URL, with **no signing key**: the cookie
+  is unreadable and unwritable from script, so comparing a value the attacker
+  cannot see is the whole defence and a key would protect nothing more. It is
+  checked **before the code is spent** — trading first would attach the account
+  and then discover the callback was forged. Disconnecting erases the credential
+  but does not revoke at the provider, which only the source can do; claiming
+  otherwise would leave a live token behind a console saying it is gone.
 - **An MCP write is gated by refusing, and the approval is for those arguments
   (MCP.4).** The agent loop's gate pauses a turn; MCP has no turn, so it cannot
   be reused — a request that has not been answered is one timing out on a

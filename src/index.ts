@@ -17,6 +17,7 @@ import { RedactingApprovalStore } from './approval/redacting-approval-store.js';
 import type { ApprovalStore } from './approval/approval-store.js';
 import { CachedConnections } from './connections/cached-connections.js';
 import { ConnectionManager } from './connections/connection-manager.js';
+import { ConnectionOnboarding } from './connections/connection-onboarding.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
 import type { CredentialResolver } from './connections/credential-resolver.js';
@@ -109,6 +110,12 @@ export interface Harness {
    * at call time. Present only when the vault is — it needs one to resolve.
    */
   readonly connectionManager: ConnectionManager | null;
+  /**
+   * Running an OAuth flow to its end: authorization URL in, stored connection
+   * out. Present only when the vault is, since there is nowhere to seal a
+   * credential without one. The client secret never leaves it.
+   */
+  readonly onboarding: ConnectionOnboarding | null;
   /** Snapshots of connected resources; browsable and prunable on its own. */
   readonly resourceCache: ResourceCacheStore;
   /**
@@ -300,6 +307,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // providers, the resolver refreshes stale tokens transparently. The cache
   // wraps the manager once it exists, so products get read-through for free.
   let connectionManager: ConnectionManager | null = null;
+  let onboarding: ConnectionOnboarding | null = null;
   let cachedConnections: CachedConnections | null = null;
   let mcpServer: McpServer | null = null;
   if (vault) {
@@ -309,6 +317,12 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
         ? new OAuthTokenRefresher(vault, new OAuthClient(), providers)
         : new VaultCredentialResolver(vault);
     connectionManager = new ConnectionManager(connectors, connections, resolver);
+    // Only when providers are configured: a deployment with none has nothing to
+    // onboard, and an onboarding that can connect nothing is a button that
+    // always fails.
+    if (providers.size > 0) {
+      onboarding = new ConnectionOnboarding(providers, new OAuthClient(), connections, vault);
+    }
     cachedConnections = new CachedConnections(connectionManager, resourceCache);
     // Read-only by default; the cache serves reads, sparing the sources.
     mcpServer = new McpServer(cachedConnections, { name: HARNESS_NAME });
@@ -344,6 +358,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     connectors,
     vault,
     connectionManager,
+    onboarding,
     resourceCache,
     cachedConnections,
     mcpServer,
@@ -481,6 +496,8 @@ export type {
 } from './mcp/protocol.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
+export { ConnectionOnboarding, UnknownProviderError } from './connections/connection-onboarding.js';
+export type { AuthorizationRequest, CompleteRequest } from './connections/connection-onboarding.js';
 export {
   OAuthConfigError,
   connectorsConfigSchema,

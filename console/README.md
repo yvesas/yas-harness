@@ -68,5 +68,34 @@ grew `breakdown` (by model, task, day and session) and `savings`. That is
 consumer that needed it, not by a guess about what a consumer might one day
 want.
 
-Still to come: Connections (phase 1), Approvals (2), Playground (3), Config (4),
-Evals (5).
+## Connections (phase 1)
+
+The page that justifies the console existing: **OAuth needs a browser**, so it
+is the one thing a config file and a script cannot do at all. The harness owns
+the mechanics and leaves the callback to a product
+([ADR 0007](../docs/adr/0007-oauth-and-transparent-refresh.md)) — this is that
+product.
+
+Phase 1 revealed a second gap, the same way phase 0 did: the harness had both
+ends of the flow and nothing joining them. `ConnectionOnboarding` is the join —
+authorization URL in, stored connection with a sealed credential out. Callers
+name a **connector**, never pass an `OAuthProvider`, so a client secret does not
+reach every surface that wants to render a button.
+
+How `state` is kept, since it is the security-relevant part:
+
+- 32 random bytes in an **HttpOnly cookie**, and the same value in the URL. They
+  must match on the callback. **No signing key** — the cookie cannot be read or
+  written from script, so an attacker cannot make one matching the URL they
+  crafted; comparing a value they cannot see is enough.
+- `SameSite=Lax`, because the provider returns with a top-level GET, which Lax
+  allows and Strict would drop.
+- Cleared whatever the outcome. A state that outlives its flow can be replayed.
+- **Checked before the code is spent.** Trading first and validating afterwards
+  would already have attached the account by the time the check fails.
+
+Disconnecting erases the sealed credential and the connection. It does **not**
+revoke the token at the provider — only the source can do that, and claiming
+otherwise would leave a live token behind a console saying it is gone.
+
+Still to come: Approvals (2), Playground (3), Config (4), Evals (5).

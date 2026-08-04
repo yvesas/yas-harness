@@ -20,6 +20,7 @@ export const metadata = {
 
 const PAGES = [
   { href: '/', label: 'Overview' },
+  { href: '/connections', label: 'Connections' },
   { href: '/traces', label: 'Traces' },
   { href: '/cost', label: 'Cost' },
   { href: '/modules', label: 'Modules' },

@@ -80,6 +80,13 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      # The Config page edits these files, and the point of editing a file is
+      # that the change survives. Without the mount it would write into a
+      # container layer and vanish on the next rebuild — an editor that quietly
+      # discards your work. Mounted read-write for that reason, and it is the
+      # repository's own `config/`, so a change shows up in `git diff`.
+      - ./config:/app/config
     ports:
       # Bound to loopback on the host, deliberately. The console holds the
       # master key; reaching it from the network is a decision that needs the

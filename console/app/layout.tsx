@@ -26,6 +26,8 @@ const PAGES = [
   { href: '/traces', label: 'Traces' },
   { href: '/cost', label: 'Cost' },
   { href: '/modules', label: 'Modules' },
+  { href: '/config', label: 'Config' },
+  { href: '/evals', label: 'Evals' },
 ] as const;
 
 export default function RootLayout({ children }: { children: ReactNode }) {

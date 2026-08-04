@@ -152,6 +152,31 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **The console edits configuration files, and validates them with the
+  harness's own parsers (console phases 4 and 5).** Configuration stays in
+  `config/*.json` under Git: a table would cost the history, the review of a
+  price change, the fork model and a reproducible deploy, and would buy a form.
+  So the console is an editor and a validator that never becomes the only way
+  in. It checks a draft with **`parseModelConfig` and `parsePersona` themselves**
+  rather than a second schema, which would agree today and drift by Christmas —
+  nothing that would stop the harness starting reaches the disk. (Writing an
+  invalid fixture is how the test suite came to demonstrate that a `sensitive`
+  route may not use a cheap model.) `connectors.json` is checked as a *shape*
+  instead, because the harness's loader resolves `${VAR}` against the
+  environment and a secret unset on this machine is not a reason to refuse
+  somebody's edit; placeholders are written back untouched, since resolving one
+  to display it puts a client secret on a web page and resolving one to save it
+  writes the secret into Git. Only three files are editable **by name**: a path
+  from a form is input, and without the allow-list `../../.env` is readable and
+  the console is a secret viewer. Compose mounts `config/` read-write, because
+  an editor whose changes vanish on the next rebuild discards your work. The
+  browser gets only a JSON check and a diff, from a module with no harness
+  import — a client component importing `config-files.ts` dragged `pg`, and
+  therefore `net` and `dns`, toward the browser, which is how that boundary got
+  drawn and why the two files live apart. The evals page shows **confidence
+  beside each failure**: wrong-and-sure is a module description that misleads
+  the router, wrong-and-unsure is a genuinely ambiguous case, and the fix is in
+  different places.
 - **Conversations are listable, and a turn routes and runs under one trace
   (console phase 3).** `SessionStore.list` is the fourth port a console page has
   asked for. `find` answers about a session whose id you already hold, which is

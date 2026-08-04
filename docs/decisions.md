@@ -152,6 +152,35 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **A model provider is built on first use, not when the harness is (found by
+  `docker compose up`).** Providers read their key in their constructor and were
+  built while the harness was, so a key was required to do things that never
+  touch a model: create a tenant, read a trace, show a cost table. A console
+  rendering last month's spend had to be handed an API key, and a one-command
+  start died on a provider nobody had asked for. `LazyProvider` moves
+  construction to the first `invoke`. **The wiring check does not move** — a
+  lazy provider knows its `name` immediately, so a route pointing at a provider
+  nobody registered still fails while the gateway is built, which was the
+  mistake worth catching early. Only the *credential* requirement moves, to
+  where it is genuinely needed, with the same message it always had. The
+  companion decision: `ensure-tenant.mjs` uses `PostgresTenantStore` directly
+  rather than `createHarness`, because creating a tenant is a row in a table and
+  booting the whole composition to write it drags persona and model
+  configuration in as prerequisites for a schema operation.
+- **`docker compose up` starts everything, and the tenant is a service rather
+  than a side effect.** `postgres` → `migrate` → `seed` → `console`, the middle
+  two running once and exiting. The console still refuses to create its own
+  tenant, which is right for a page load and wrong for a first start — so the
+  creation is a step somebody can read in the compose file, disable, or run by
+  hand, instead of a side effect hidden in a page. The console binds `0.0.0.0`
+  *inside* its container and is published to `127.0.0.1` on the host: a server
+  bound to loopback inside its own namespace is unreachable from anywhere, and
+  the loopback rule belongs at the published port. Its Dockerfile copies sources
+  **before** `npm ci`, the opposite of the harness image, because npm runs
+  `prepare` for a `file:` dependency while linking it and `--ignore-scripts`
+  does not reach that. And `configDir` is named rather than inferred from
+  `process.cwd()`: Next's standalone server runs from its own directory, which
+  is exactly how this failed the first time it ran in a container.
 - **The approval inbox is per tenant, and a rejection carries a reason (console
   phase 2).** `ApprovalStore.list` answers about one conversation, which is only
   useful to somebody who already knows which conversation to look at — and a

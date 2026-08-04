@@ -23,6 +23,7 @@
     "migrations",
     "config",
     "scripts/migrate.mjs",
+    "scripts/ensure-tenant.mjs",
     "NOTICE"
   ],
   "workspaces": [

@@ -46,6 +46,9 @@ RUN npm ci --omit=dev --ignore-scripts --workspaces=false && npm cache clean --f
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
 COPY scripts/migrate.mjs ./scripts/migrate.mjs
+# Operational, and small: creating the first tenant is something every product
+# has to do once before anything can be attributed to one.
+COPY scripts/ensure-tenant.mjs ./scripts/ensure-tenant.mjs
 COPY config ./config
 COPY LICENSE NOTICE ./
 

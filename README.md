@@ -9,8 +9,10 @@ so that every product built on top of it does not rebuild that plumbing.
 It is the common engine behind the YAS Labs products. Products fork this
 repository and add their own business modules on top.
 
-> **Status: early development.** The foundation is in place; the agent core is
-> being built. Not ready for production use.
+> **Status: 1.0.0.** The ports are stable from this tag on. The console is
+> read-only so far, and OAuth has been proven against mocks rather than a live
+> provider — see the known limitations in
+> [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## The golden rule
 
@@ -83,9 +85,10 @@ const harness = await createHarness();          // reads ./config and DATABASE_U
 const tenant = await harness.tenants.ensure({ slug: 'acme', name: 'Acme' });
 ```
 
-> Not on npm yet: `private: true` in `package.json` is the deliberate guard, and
-> dropping it is the one-line switch at v1.0.0. Install by tag until then —
-> `npm run package:check` proves the tarball installs and imports either way.
+> Not on npm: `private: true` in `package.json` is a deliberate guard, and
+> removing it is a separate decision rather than something a release does on its
+> own. Install by tag — `npm run package:check` proves the tarball installs and
+> imports by name either way.
 
 ## Scripts
 
@@ -154,9 +157,13 @@ open a public issue.
 
 ## Releases
 
-[`CHANGELOG.md`](./CHANGELOG.md) records what changed and what an upgrade
-asks of you. Nothing is tagged yet: until `1.0.0` the port interfaces should be
-treated as unstable.
+[`CHANGELOG.md`](./CHANGELOG.md) records what changed and what an upgrade asks
+of you, including a **known limitations** section for each release — the things
+worth knowing before you depend on it.
+
+**From `1.0.0`, the ports are the contract.** Removing a method, adding a
+required one, or changing what one returns is a breaking change and waits for
+the next major.
 
 ## Contributing
 

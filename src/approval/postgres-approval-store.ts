@@ -12,7 +12,7 @@
 import type { Pool } from 'pg';
 
 import type { Approval, ApprovalStore, Decision, RequestApprovalInput } from './approval-store.js';
-import { ApprovalNotPendingError } from './approval-store.js';
+import { ApprovalNotPendingError, DEFAULT_PENDING_LIMIT } from './approval-store.js';
 
 interface ApprovalRow {
   id: string;
@@ -100,6 +100,19 @@ export class PostgresApprovalStore implements ApprovalStore {
         WHERE tenant_id = $1 AND session_id = $2
         ORDER BY requested_at, id`,
       [tenantId, sessionId],
+    );
+    return rows.map(toApproval);
+  }
+
+  async pending(tenantId: string, limit = DEFAULT_PENDING_LIMIT): Promise<Approval[]> {
+    const { rows } = await this.pool.query<ApprovalRow>(
+      // Oldest first: that is the turn that has been parked longest, and a
+      // parked turn is a person waiting on the other end.
+      `SELECT * FROM approvals
+        WHERE tenant_id = $1 AND status = 'pending'
+        ORDER BY requested_at, id
+        LIMIT $2`,
+      [tenantId, limit],
     );
     return rows.map(toApproval);
   }

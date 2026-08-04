@@ -83,6 +83,9 @@ class CapturingApprovalStore implements ApprovalStore {
   list(): Promise<Approval[]> {
     return Promise.resolve([]);
   }
+  pending(): Promise<Approval[]> {
+    return Promise.resolve([]);
+  }
 }
 
 describe('RedactingSessionStore', () => {

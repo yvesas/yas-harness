@@ -10,7 +10,7 @@
  */
 
 import type { Approval, ApprovalStore, Decision, RequestApprovalInput } from './approval-store.js';
-import { ApprovalError, ApprovalNotPendingError } from './approval-store.js';
+import { ApprovalError, ApprovalNotPendingError, DEFAULT_PENDING_LIMIT } from './approval-store.js';
 
 // Async on purpose despite doing no I/O: it matches the Postgres adapter's
 // shape, so a rejected decision is a rejected promise, not a synchronous throw.
@@ -79,6 +79,15 @@ export class InMemoryApprovalStore implements ApprovalStore {
     return [...this.#approvals.values()]
       .filter((approval) => approval.tenantId === tenantId && approval.sessionId === sessionId)
       .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime());
+  }
+
+  pending(tenantId: string, limit = DEFAULT_PENDING_LIMIT): Promise<Approval[]> {
+    return Promise.resolve(
+      [...this.#approvals.values()]
+        .filter((approval) => approval.tenantId === tenantId && approval.status === 'pending')
+        .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+        .slice(0, limit),
+    );
   }
 
   async #decide(

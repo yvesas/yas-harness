@@ -152,6 +152,25 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **The approval inbox is per tenant, and a rejection carries a reason (console
+  phase 2).** `ApprovalStore.list` answers about one conversation, which is only
+  useful to somebody who already knows which conversation to look at — and a
+  person deciding does not. `pending(tenantId)` is the third port a console page
+  has asked for, oldest first, because each row is a turn parked mid-flight with
+  somebody waiting on the other end. **Adding a required method to a port is
+  breaking after 1.0.0**, and this one immediately broke a test double, which is
+  the demonstration: doing it before the tag is the cheap moment. The review
+  screen shows the tool, **the exact input**, and the turn that led here — a
+  queue showing only a tool name asks people to approve a verb, and a reviewer
+  who cannot see the input is a rubber stamp with extra steps. The input is
+  rendered as stored, not re-scrubbed: it was redacted on the way in, and
+  redacting again would hide the difference between "the secret was caught" and
+  "the display is hiding it", on the one screen where a person vouches for
+  exactly these bytes. A rejection should carry a reason and an approval need
+  not — "no" is the answer somebody has to act on, and an MCP rejection with
+  none gets retried forever. `decided_by` records that the decision came through
+  the console rather than inventing a name, because an audit trail's value is
+  being true; `CONSOLE_OPERATOR` is how a deployment says something real.
 - **Finishing an OAuth flow is a port, and the client secret never leaves it
   (console phase 1).** The harness had both ends — `OAuthClient` for the
   mechanics, `ConnectionStore` and `CredentialVault` for the storage — and

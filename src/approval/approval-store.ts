@@ -63,6 +63,9 @@ export class ApprovalNotPendingError extends ApprovalError {
  * Every method is scoped by tenant: there is no decision or read that crosses
  * the tenant boundary.
  */
+/** How many waiting decisions a listing returns unless told otherwise. */
+export const DEFAULT_PENDING_LIMIT = 50;
+
 export interface ApprovalStore {
   /** Record pending approvals for a turn; returns them in the given order. */
   request(inputs: readonly RequestApprovalInput[]): Promise<Approval[]>;
@@ -77,4 +80,14 @@ export interface ApprovalStore {
   reject(tenantId: string, id: string, decision: Decision): Promise<Approval>;
   /** The audit trail for a conversation: what was asked, decided, and by whom. */
   list(tenantId: string, sessionId: string): Promise<Approval[]>;
+  /**
+   * Everything this tenant is waiting on, oldest first.
+   *
+   * `list` answers about one conversation, which is only useful to somebody who
+   * already knows which conversation to look at. A person deciding does not:
+   * they have an inbox, and the question is "what is waiting for me". Oldest
+   * first because that is the one that has been blocked longest — a turn is
+   * parked until this is answered.
+   */
+  pending(tenantId: string, limit?: number): Promise<Approval[]>;
 }

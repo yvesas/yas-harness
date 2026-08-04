@@ -51,4 +51,11 @@ export class RedactingApprovalStore implements ApprovalStore {
   list(tenantId: string, sessionId: string): Promise<Approval[]> {
     return this.#inner.list(tenantId, sessionId);
   }
+
+  // Reading is not redacted, here or in `list`: the input was scrubbed on the
+  // way in, and scrubbing again would hide the difference between "the secret
+  // was caught" and "the display is hiding it".
+  pending(tenantId: string, limit?: number): Promise<Approval[]> {
+    return this.#inner.pending(tenantId, limit);
+  }
 }

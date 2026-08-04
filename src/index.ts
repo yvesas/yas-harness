@@ -541,10 +541,15 @@ export type { ModelConfig, ModelEntry, ModelTier } from './models/routing.js';
 export { InMemoryUsageRecorder, computeCostUsd } from './telemetry/model-usage.js';
 export type {
   BilledTo,
+  CompressionSavings,
   CompressionUsage,
   ModelUsageRecord,
+  SpendDimension,
+  SpendQuery,
+  SpendSlice,
   UsageRecorder,
 } from './telemetry/model-usage.js';
+export { DEFAULT_BREAKDOWN_LIMIT } from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 export { InMemoryTraceRecorder, TurnTrace } from './telemetry/trace.js';

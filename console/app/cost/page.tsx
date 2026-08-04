@@ -2,17 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * What the tenant has spent.
+ * What the tenant has spent, and where it went.
  *
- * And an honest note about what it cannot yet show. `UsageReader.spend` returns
- * one aggregate — a total, a call count, tokens — with no breakdown by model or
- * by day. Doc 21 predicted this exact gap and asked the page to *ask* for it
- * rather than the harness to guess: so the page states the limit instead of
- * quietly rendering the only number it has as though it were the whole story.
- *
- * That missing breakdown is F6.6, and this page is the reason it is now a
- * concrete request rather than a vague plan item.
+ * This page used to state what it could not show. It asked, and `UsageReader`
+ * grew `breakdown` and `savings` — which is the method doc 21 argued for: a
+ * port shaped by the consumer that needed it, rather than by a guess about
+ * what a consumer might one day want.
  */
+
+import type { SpendSlice } from 'yas-harness';
 
 import { currentTenant } from '../../lib/tenant';
 import { harness } from '../../lib/harness';
@@ -20,10 +18,23 @@ import { Failure } from '../failure';
 
 export const dynamic = 'force-dynamic';
 
+const DAYS = 14;
+const DEAREST_SESSIONS = 10;
+
 export default async function Cost() {
   try {
     const tenant = await currentTenant();
-    const spend = await (await harness()).usage.spend(tenant.id);
+    const api = await harness();
+    const from = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
+
+    const [spend, byModel, byTask, byDay, bySession, savings] = await Promise.all([
+      api.usage.spend(tenant.id),
+      api.usage.breakdown(tenant.id, { by: 'model' }),
+      api.usage.breakdown(tenant.id, { by: 'task' }),
+      api.usage.breakdown(tenant.id, { by: 'day', from }),
+      api.usage.breakdown(tenant.id, { by: 'session', limit: DEAREST_SESSIONS }),
+      api.usage.savings(tenant.id),
+    ]);
 
     return (
       <>
@@ -47,20 +58,99 @@ export default async function Cost() {
           </div>
         </div>
 
-        <h2>What this page cannot show yet</h2>
+        <h2>By model</h2>
+        <Slices slices={byModel} label="Model" empty="No calls recorded yet." />
+
+        <h2>By task</h2>
         <p className="muted">
-          Cost per model, per day and per session, and the saving compression paid for. The harness
-          records all of it — <code>model_usage</code> has the columns — but{' '}
-          <code>UsageReader</code> only exposes the aggregate above.
+          What routing is for: triage should stay on the cheap tier, and this is where that stops
+          being true.
         </p>
+        <Slices slices={byTask} label="Task" empty="No calls recorded yet." />
+
+        <h2>Last {DAYS} days</h2>
+        <Slices
+          slices={byDay}
+          label="Day (UTC)"
+          empty={`Nothing in the last ${String(DAYS)} days.`}
+        />
+
+        <h2>Dearest conversations</h2>
+        <Slices
+          slices={bySession}
+          label="Session"
+          empty="No spend attributed to a conversation yet."
+        />
         <p className="muted">
-          Left as a gap on purpose. A port added because a page might one day want it is a port
-          shaped by a guess; this page asking for it is the request that should shape it. It is{' '}
-          <strong>F6.6</strong>, and it is now concrete.
+          Calls made outside a conversation — a routing decision, for instance — are absent here
+          rather than gathered under a session that never existed. They are still in the total.
         </p>
+
+        <h2>Compression</h2>
+        {savings === null ? (
+          <p className="muted">
+            Compression has never run for this tenant. That is not the same as it having saved
+            nothing — it is off by default and stays off until an eval says answers hold.
+          </p>
+        ) : (
+          <p>
+            {savings.beforeTokens} tokens became {savings.afterTokens} across {savings.calls} call
+            {savings.calls === 1 ? '' : 's'} —{' '}
+            <strong>
+              {(
+                ((savings.beforeTokens - savings.afterTokens) / savings.beforeTokens) *
+                100
+              ).toFixed(1)}
+              %
+            </strong>{' '}
+            off the context it touched.
+          </p>
+        )}
       </>
     );
   } catch (error) {
     return <Failure error={error} />;
   }
+}
+
+function Slices({
+  slices,
+  label,
+  empty,
+}: {
+  slices: readonly SpendSlice[];
+  label: string;
+  empty: string;
+}) {
+  if (slices.length === 0) {
+    return <p className="muted">{empty}</p>;
+  }
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>{label}</th>
+          <th>Cost</th>
+          <th>Calls</th>
+          <th>In / out</th>
+          <th>Cached in</th>
+        </tr>
+      </thead>
+      <tbody>
+        {slices.map((slice) => (
+          <tr key={slice.key}>
+            <td>
+              <code>{slice.key}</code>
+            </td>
+            <td>${slice.costUsd.toFixed(6)}</td>
+            <td>{slice.calls}</td>
+            <td>
+              {slice.inputTokens} / {slice.outputTokens}
+            </td>
+            <td className="muted">{slice.cachedInputTokens}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }

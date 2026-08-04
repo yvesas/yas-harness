@@ -99,6 +99,19 @@ const tenant = await harness.tenants.ensure({ slug: 'acme', name: 'Acme' });
 | `npm run package:check` | Pack, install into a throwaway project and import by name |
 | `npm run isolation` | Prove the schema isolates tenants — every table, every key |
 | `npm run migrate up\|down\|status` | Apply, roll back or inspect migrations |
+| `npm run console` | The operator console, on `http://127.0.0.1:4100` |
+
+## The console
+
+`console/` is a web console for seeing the harness and driving it — spend,
+recent turns step by step, what is registered, and (in later phases) connecting
+a source over OAuth, approving a gated tool, and talking to the agent. It is an
+npm workspace in this repository, because it is **one product**: a harness
+nobody can see is a library with a promise.
+
+It is also a boundary test that costs less than building a whole product on top.
+Every place the console needs a raw `pool.query()` instead of a port is a gap in
+the harness, and it has already found one. See [`console/`](./console/).
 
 ## Architecture
 

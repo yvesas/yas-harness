@@ -1,0 +1,113 @@
+/* Copyright 2026 YAS Softwares LTDA */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+:root {
+  color-scheme: light dark;
+  --edge: color-mix(in srgb, currentColor 15%, transparent);
+  --muted: color-mix(in srgb, currentColor 60%, transparent);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font:
+    15px/1.55 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+
+header {
+  display: flex;
+  gap: 1.5rem;
+  align-items: baseline;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--edge);
+}
+
+header nav {
+  display: flex;
+  gap: 1rem;
+}
+
+a {
+  color: inherit;
+}
+
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+h1 {
+  font-size: 1.35rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin-top: 2rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0 1.5rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--edge);
+  vertical-align: top;
+}
+
+th {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+code,
+pre {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.85em;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.failed {
+  color: #b3261e;
+}
+
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.card {
+  flex: 1 1 10rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+}
+
+.card .value {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}

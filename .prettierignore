@@ -2,3 +2,6 @@ dist
 coverage
 node_modules
 *.md
+
+# the console's build output
+console/.next

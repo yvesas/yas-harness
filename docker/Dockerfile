@@ -23,7 +23,10 @@ WORKDIR /app
 # Every dependency here is pure JavaScript, so nothing needs a build step of
 # its own. The build below is explicit instead.
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+# --workspaces=false keeps this to the harness itself. The repository is a
+# workspace root (the console lives beside it), and without the flag npm would
+# install React and Next into an image that serves neither.
+RUN npm ci --ignore-scripts --workspaces=false
 
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
@@ -38,7 +41,7 @@ WORKDIR /app
 # Same reason as above, plus: typescript is a devDependency, so running the
 # prepare build here would fail outright.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts --workspaces=false && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations

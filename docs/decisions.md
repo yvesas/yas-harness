@@ -152,6 +152,27 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **The console lives in this repository, and the Golden Rule stops at `src/`
+  (F7.1, phase 0).** It is one product: a harness nobody can see is a library
+  with a promise, and the console with no harness is an empty page. One repo
+  means one version, one CI, one governance setup and no drift to manage — the
+  alternative was a second repo to pin by tag, which is a problem invented to
+  solve a problem nobody had. The console is a **product** built on the harness,
+  so it may know things `src/` must not; the boundary check still reads `src/`
+  only, and ESLint ignores `console/` because it has its own toolchain (JSX, DOM
+  lib, bundler resolution). It imports **`yas-harness` by package name**, not a
+  relative path into `../src` — so a broken exports map fails the console build
+  rather than surprising the first person who installs the package. The
+  Dockerfile pins `npm ci --workspaces=false`, or the harness image would carry
+  React. **Its real job is as a boundary test**: every place it needs raw SQL
+  instead of a port is a gap, and phase 0 found one immediately —
+  `ToolRegistry.list()`, because there was no way to see which tools are gated
+  without holding the definitions, and holding those means holding `execute`.
+  Kept separate from `schemas()`, since a model must **not** be told which tools
+  are gated: that is a fact about the humans behind the tool, and telling it
+  invites reasoning about the gate instead of about the task. The Cost page
+  states what it cannot show rather than rendering its one aggregate as the
+  whole story — leaving F6.6 to be shaped by a page that asked, not by a guess.
 - **Bringing a model key is opting out of the platform's (E3).** BYOM is a
   routing decision before it is a credential one. A tenant with no keys is
   routed exactly as before, on ours; a tenant with *any* key is routed only to

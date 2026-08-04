@@ -5,6 +5,14 @@
 Reusable agent chassis (harness) for YAS Labs products.
 Products fork this repo and add business modules on top.
 
+The repository holds **two things, one product**: the harness itself (`src/`,
+published as the `yas-harness` package) and the operator console (`console/`, an
+npm workspace running Next.js). The console is not a separate project — a
+harness nobody can see is a library with a promise, and it is also the boundary
+test that reveals which read ports are missing. **The Golden Rule below applies
+to `src/` only**; the console is a product built on the harness and is allowed
+to know things a harness must not.
+
 ## Golden rule
 
 The harness NEVER knows about any specific product domain.

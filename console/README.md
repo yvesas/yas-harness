@@ -209,4 +209,23 @@ name — an audit trail's whole value is being true. `CONSOLE_OPERATOR` lets a
 deployment say something real. Same seam as `currentTenant`: when authentication
 arrives, one function changes.
 
-Still to come: Playground (3), Config (4), Evals (5).
+## Playground (phase 3)
+
+Talk to the agent with the trace beside it. Side by side is the point: a chat
+alone tells you it answered, and the trace tells you which module was chosen and
+why, what it cost, which tools ran, and where a turn stopped. Reading them apart
+means holding one in your head while looking at the other.
+
+A turn is `router.route` then `agent.run`, **sharing a trace id**. Two traces
+would mean opening two pages to answer one question.
+
+Phase 3 asked for `SessionStore.list` — the fourth port. `find` answers about a
+session whose id you already hold, which is only true of the one you just
+created; coming back starts from "which conversations are there". Ordered by
+last activity rather than creation.
+
+It is also the only page that needs a model key. Everything else works without
+one, because a provider is built on first use — so a console with no key shows
+spend, traces, modules and approvals, and the playground says what is missing.
+
+Still to come: Config (4), Evals (5).

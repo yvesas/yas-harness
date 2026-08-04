@@ -628,6 +628,11 @@ export type {
   LifecycleOptions,
   ShutdownSignalOptions,
 } from './lifecycle/shutdown.js';
+// The three helpers `model-gateway.ts` documents as what a caller usually
+// wants. They were reachable from inside `src/` and from nowhere else, which
+// made building a request through the published package harder than building
+// one in a test.
+export { cachePrefixLength, responseText, toolCalls, userMessage } from './models/model-gateway.js';
 export { LazyProvider } from './models/lazy-provider.js';
 export { InMemoryModelKeys, ModelKeyError, ModelKeyVault } from './models/model-keys.js';
 export type { ModelKeys, ModelKeyStore } from './models/model-keys.js';

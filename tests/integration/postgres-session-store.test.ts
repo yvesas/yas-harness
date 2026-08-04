@@ -15,6 +15,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { PostgresSessionStore } from '../../src/memory/postgres-session-store.js';
+import { userMessage } from '../../src/models/model-gateway.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
 
@@ -144,6 +145,27 @@ describe.skipIf(!DATABASE_URL)('PostgresSessionStore', () => {
     ).rejects.toThrow(/messages_role_check/);
 
     expect(await store.messages(tenantA, session.id)).toEqual([]);
+  });
+
+  it('lists a tenant\u2019s conversations by last activity, with counts', async () => {
+    const older = await store.create({ tenantId: tenantA, personaId: 'default' });
+    const newer = await store.create({ tenantId: tenantA, personaId: 'default' });
+    // The older conversation is the one just replied to.
+    await store.append(tenantA, older.id, [userMessage('still going')]);
+
+    const listed = await store.list(tenantA);
+
+    expect(listed.map((session) => session.id)).toEqual([older.id, newer.id]);
+    expect(listed[0]).toMatchObject({ messages: 1 });
+    // An empty conversation reports its creation as its activity, so it sorts
+    // somewhere real instead of at an arbitrary end.
+    expect(listed[1]).toMatchObject({ messages: 0, lastActivityAt: newer.createdAt });
+  });
+
+  it('never lists one tenant\u2019s conversations for another', async () => {
+    await store.create({ tenantId: tenantA, personaId: 'default' });
+
+    expect(await store.list(tenantB)).toHaveLength(0);
   });
 });
 

@@ -11,7 +11,15 @@
 
 import type { ModelMessage } from '../models/model-gateway.js';
 
-import type { CreateSessionInput, Session, SessionStore, StoredMessage } from './session-store.js';
+import type {
+  CreateSessionInput,
+  ListSessionsQuery,
+  Session,
+  SessionStore,
+  SessionSummary,
+  StoredMessage,
+} from './session-store.js';
+import { DEFAULT_SESSION_LIMIT } from './session-store.js';
 
 export class InMemorySessionStore implements SessionStore {
   readonly #sessions = new Map<string, Session>();
@@ -72,6 +80,24 @@ export class InMemorySessionStore implements SessionStore {
       });
     }
     this.#messages.set(sessionId, stored);
+  }
+
+  list(tenantId: string, options: ListSessionsQuery = {}): Promise<SessionSummary[]> {
+    const summaries = [...this.#sessions.values()]
+      .filter((session) => session.tenantId === tenantId)
+      .map((session) => {
+        const stored = this.#messages.get(session.id) ?? [];
+        return {
+          ...session,
+          messages: stored.length,
+          // An empty conversation has never been spoken in, so its creation is
+          // the only activity there is.
+          lastActivityAt: stored.at(-1)?.createdAt ?? session.createdAt,
+        };
+      })
+      .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+
+    return Promise.resolve(summaries.slice(0, options.limit ?? DEFAULT_SESSION_LIMIT));
   }
 
   async #assertVisible(tenantId: string, sessionId: string): Promise<void> {

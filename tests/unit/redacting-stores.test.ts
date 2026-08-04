@@ -43,6 +43,9 @@ class CapturingSessionStore implements SessionStore {
     this.appended.push(...messages);
     return Promise.resolve();
   }
+  list(): Promise<never[]> {
+    return Promise.resolve([]);
+  }
 }
 
 class CapturingPoolStore implements PoolStore {

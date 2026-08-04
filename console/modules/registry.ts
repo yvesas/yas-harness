@@ -28,6 +28,7 @@ import { z } from 'zod';
 import {
   ModuleRegistry,
   ToolRegistry,
+  type ToolDefinition,
   denied,
   granted,
   type ContextRequest,
@@ -53,13 +54,45 @@ const LINKS = 'links';
 /** How many entries a listing tool will put in front of a model. */
 const LISTING_LIMIT = 20;
 
-export function buildModules(pools: () => Promise<PoolStore>): ModuleRegistry {
-  return new ModuleRegistry().register(notesModule(pools)).register(linksModule(pools));
+/**
+ * The modules, and the tools the agent may run.
+ *
+ * Two registries, filled together on purpose. A module's `tools` is what that
+ * module declares — the Modules page reads it, and the router reasons about it.
+ * The agent's `ToolRegistry` is what it is actually allowed to call. The harness
+ * keeps them apart because a product may want the agent to run less than a
+ * module advertises; this product wants them identical, so a page cannot show
+ * one thing while the agent runs another.
+ */
+export function buildModules(pools: () => Promise<PoolStore>): {
+  modules: ModuleRegistry;
+  tools: ToolRegistry;
+} {
+  const tools = new ToolRegistry();
+  const modules = new ModuleRegistry()
+    .register(notesModule(pools, tools))
+    .register(linksModule(pools, tools));
+  return { modules, tools };
 }
 
-function notesModule(pools: () => Promise<PoolStore>) {
-  const tools = new ToolRegistry()
-    .register({
+/**
+ * Register one tool into both registries.
+ *
+ * A function rather than a loop over an array: `ToolDefinition<Input>` is
+ * contravariant in its input, so a list of tools with different schemas has no
+ * useful common type, and the cast that would paper over it is hiding the very
+ * thing the registry exists to check.
+ */
+function into<Input>(tool: ToolDefinition<Input>, ...registries: readonly ToolRegistry[]): void {
+  for (const registry of registries) {
+    registry.register(tool);
+  }
+}
+
+function notesModule(pools: () => Promise<PoolStore>, agent: ToolRegistry) {
+  const tools = new ToolRegistry();
+  into(
+    {
       name: 'note_add',
       description: 'Write down a short note under a title, so it can be recalled later.',
       input: z.object({
@@ -72,8 +105,12 @@ function notesModule(pools: () => Promise<PoolStore>) {
         await store.set({ tenantId: context.tenantId, moduleId: NOTES }, keyFor(title), note);
         return { content: `Noted "${title}".`, isError: false };
       },
-    })
-    .register({
+    },
+    tools,
+    agent,
+  );
+  into(
+    {
       name: 'note_list',
       description: 'List the titles of the notes written down so far.',
       input: z.object({}),
@@ -89,7 +126,10 @@ function notesModule(pools: () => Promise<PoolStore>) {
           .join('\n');
         return { content: titles, isError: false };
       },
-    });
+    },
+    tools,
+    agent,
+  );
 
   return {
     id: NOTES,
@@ -126,9 +166,10 @@ async function discloseTitles(
   );
 }
 
-function linksModule(pools: () => Promise<PoolStore>) {
-  const tools = new ToolRegistry()
-    .register({
+function linksModule(pools: () => Promise<PoolStore>, agent: ToolRegistry) {
+  const tools = new ToolRegistry();
+  into(
+    {
       name: 'link_save',
       description: 'Save a link with a one-line reason for keeping it.',
       input: z.object({
@@ -141,8 +182,12 @@ function linksModule(pools: () => Promise<PoolStore>) {
         await store.set({ tenantId: context.tenantId, moduleId: LINKS }, keyFor(url), link);
         return { content: `Saved ${url}.`, isError: false };
       },
-    })
-    .register({
+    },
+    tools,
+    agent,
+  );
+  into(
+    {
       name: 'link_list',
       description: 'List the links saved so far, with the reason each was kept.',
       input: z.object({}),
@@ -161,7 +206,10 @@ function linksModule(pools: () => Promise<PoolStore>) {
           .join('\n');
         return { content: lines, isError: false };
       },
-    });
+    },
+    tools,
+    agent,
+  );
 
   return {
     id: LINKS,

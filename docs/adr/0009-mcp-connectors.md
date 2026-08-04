@@ -96,4 +96,59 @@ at once; specific tools can be added on top without replacing them.
 
 **Writes on by default.** Simpler to use. Rejected: it would let connecting a
 source over MCP hand out destructive operations with no deliberate step, and the
-approval integration is not built yet. Read-only-by-default fails safe.
+approval integration **is now built** — see the amendment below.
+
+
+---
+
+## Amendment (2026-08-04) — MCP.4: writes are gated by refusing
+
+The original decision left MCP writes outside the human-approval queue and said
+so plainly: *"approval integration is not built yet. Read-only-by-default fails
+safe."* That was honest but incomplete — a product that enabled writes got an
+unattended write surface, and nothing said so at the moment it did.
+
+**The agent loop's gate cannot be reused, and the reason is structural.** That
+gate works by pausing a turn: the tool does not run, the turn is parked, and a
+later call resumes it. MCP has no turn. It is request/response, and a request
+that has not been answered is one timing out on somebody's socket.
+
+So a gated call is **refused and recorded**:
+
+1. It creates a `pending` approval and does not execute. The client is told, as
+   a tool result, that the call is awaiting approval, and given the id.
+2. A person decides.
+3. The client calls **again**, the decision is found, and the call runs.
+
+Refusing is the mechanism rather than a failure mode: an MCP client retrying is
+ordinary behaviour, and an agent reading "awaiting approval" waits, which is
+what should happen.
+
+**The approval is for those arguments, not for that tool.** A request's identity
+is a hash of the tool name and its canonical arguments. That is what lets the
+second call find the first call's decision — the protocol hands out no id that
+survives a retry — and it is also the security property: approving "create
+`report.md`" approves exactly that, and a different input is a different
+question. Keying on the tool name alone would let a client get approval for
+something harmless and then send something else.
+
+**Enabling a write is now a decision that has to be written down.** Listing a
+write in `allow` with no `approvals` throws at construction unless the product
+also passes `ungated: true`. Both are legitimate; neither should be the thing
+nobody noticed. It fails at construction rather than at the first write, because
+a check that only fires the day somebody deletes something is not a check.
+
+### What this does not do
+
+**An approval is not consumed.** `ApprovalStore` has no state for spending a
+decision — `approved` is terminal — so a client holding the id can replay the
+*identical* write. Adding single use means a `consumed_at` column and a
+migration, and it was deliberately deferred. The exposure is bounded by
+*identical*: the same tool, the same arguments — for a create, making the same
+thing twice rather than something new.
+
+**`approvals.session_id` stays `NOT NULL`.** An MCP call has no conversation, so
+the product supplies a long-lived anchor session per tenant. Making the column
+nullable was the obvious alternative and was rejected: it would break the
+transitive tenant anchoring that `npm run isolation` enforces, trading a schema
+guarantee for a convenience.

@@ -21,11 +21,41 @@ set of generic, resource-shaped calls — `list`, `read`, `search`, `create`,
 - **No dependency.** The protocol (JSON-RPC 2.0 + the few MCP result shapes) is
   hand-written in `protocol.ts`, like the connectors are written against `fetch`.
 - **Safe by default.** Every call is tenant-scoped, and writes are off unless a
-  product opts in via `allow`. Wiring MCP writes through the human-approval
-  queue is a later step.
+  product opts in via `allow` — and opting in now means saying what gates them.
 - **No product domain.** It speaks `Resource`, the same in any product.
 
-See [ADR 0009](../../docs/adr/0009-mcp-connectors.md).
+### Gating a write
+
+MCP has no turn to pause, so a gated call is **refused and recorded**:
+
+```ts
+new McpServer(connections, {
+  allow: ['create', 'update'],
+  approvals: { store: harness.approvals, session: anchorSessionFor },
+});
+```
+
+1. The call creates a `pending` approval and **does not run**. The client gets a
+   tool result saying it is awaiting approval, with the id.
+2. A person decides.
+3. The client calls **again**; the decision is found and the call runs.
+
+Refusing is the mechanism, not a failure: a client retrying is ordinary, and an
+agent reading "awaiting approval" waits.
+
+**The approval is for those arguments.** A request's identity is a hash of the
+tool name and its canonical arguments — which is what lets the second call find
+the first call's decision, and what stops a client getting approval for
+something harmless and then sending something else.
+
+**An approval is not consumed.** `approved` is terminal in `ApprovalStore`, so
+the *identical* call can be replayed. Bounded by identical, and written down
+rather than glossed over; single use needs a column and a migration.
+
+Enabling a write with no `approvals` throws at construction unless you also pass
+`ungated: true`. Both are legitimate; neither should be the one nobody noticed.
+
+See [ADR 0009](../../docs/adr/0009-mcp-connectors.md) and its amendment.
 
 ## Consuming somebody else's server
 

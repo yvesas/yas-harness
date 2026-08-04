@@ -466,6 +466,7 @@ export { compressorFor } from './compression/profiles.js';
 export type { CompressionProfile } from './compression/profiles.js';
 export { renderRequestText, requestSize } from './compression/request-text.js';
 export { McpServer } from './mcp/mcp-server.js';
+export { McpUngatedWriteError } from './mcp/mcp-server.js';
 export type { McpContext, McpServerOptions } from './mcp/mcp-server.js';
 export {
   MCP_PROTOCOL_VERSION,
@@ -585,6 +586,8 @@ export type {
   McpTransport,
   McpTransportResponse,
 } from './mcp/mcp-client.js';
+export { McpApprovalGate, requestId } from './mcp/mcp-approval.js';
+export type { ApprovalOutcome, McpApprovalOptions } from './mcp/mcp-approval.js';
 export { HttpMcpTransport } from './mcp/http-mcp-transport.js';
 export type { HttpMcpTransportOptions } from './mcp/http-mcp-transport.js';
 export { Lifecycle, NotAcceptingError, handleShutdownSignals } from './lifecycle/shutdown.js';

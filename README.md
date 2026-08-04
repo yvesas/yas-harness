@@ -140,9 +140,14 @@ input.
 
 A tool the agent runs can be marked `requiresApproval`: the turn then pauses
 before running anything and waits for a person, and fails closed if no approval
-queue is wired. **That gate belongs to the agent loop.** Connector writes
-exposed over MCP do not pass through it — which is why they are off by default
-and a product has to opt in deliberately, one capability at a time.
+queue is wired.
+
+Writes exposed over **MCP** are gated differently, because MCP has no turn to
+pause — it is request/response. There, a gated call is **refused and recorded**:
+it does not run, an approval is created, and the client is told to call again
+once a person has decided. The approval covers *those arguments*, so a changed
+input asks again. Writes stay off by default, and enabling one without wiring
+the queue is refused unless the product declares `ungated: true`.
 
 To report a vulnerability, read [SECURITY.md](./SECURITY.md) — please do not
 open a public issue.

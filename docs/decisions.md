@@ -152,6 +152,29 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **Bringing a model key is opting out of the platform's (E3).** BYOM is a
+  routing decision before it is a credential one. A tenant with no keys is
+  routed exactly as before, on ours; a tenant with *any* key is routed only to
+  providers they have a key for, and a task whose candidates are all uncovered
+  **fails** rather than falling back. Falling back is the tempting alternative
+  and the one worth engineering against: it sends that tenant's data to a
+  provider they deliberately did not choose, bills us for it, and from the
+  outside looks exactly like success — they get the answer they expected and
+  find out months later. The same reasoning makes an unreachable key store an
+  error rather than an assumption of "they have none". `ModelKeys` is split so
+  that `providers()` decides routing without unsealing anything and `resolve()`
+  unseals for the one provider about to be called — a request landing on the
+  first candidate never decrypts the key for the second. Keys share the tenant's
+  existing data key rather than getting their own, so one tenant has one DEK and
+  revoking it covers everything they own; a tenant whose *first* secret is a
+  model key gets that DEK created, because requiring them to connect a source
+  first would be an ordering nobody could guess. `model_usage.billed_to` exists
+  because a tenant on their own key must not be invoiced for spend that was
+  never ours, while the cost stays recorded — what a call cost is worth knowing
+  either way. **Registered against the plan honestly:** E3 sat in the parking
+  lot pending "a paying product asking for it", and was built ahead of that on
+  request; the surface is deliberately narrow (a port, a vault, one gateway
+  policy) so it costs little to carry until then.
 - **A third-party MCP server is a connector, and its session belongs to one
   tenant (MCP.3).** The mirror of MCP.2: that direction exposes our connectors
   as MCP tools, this one consumes somebody else's server as a source, both over

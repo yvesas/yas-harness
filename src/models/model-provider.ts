@@ -15,6 +15,15 @@ export interface ProviderCall {
   /** The provider's own model id, e.g. `claude-opus-4-8`. */
   readonly model: string;
   readonly request: ModelRequest;
+  /**
+   * The tenant's own key for this provider, when they brought one (E3).
+   *
+   * Absent means the platform's, which is the adapter's configured default and
+   * the only case before BYOM. An adapter **must** use this when it is present
+   * rather than its own: it is the difference between a call the customer pays
+   * for on an account they hold and one we pay for on ours.
+   */
+  readonly apiKey?: string;
   /** Abort the call when the gateway's deadline passes. */
   readonly signal?: AbortSignal;
 }

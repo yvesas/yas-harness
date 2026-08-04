@@ -70,12 +70,17 @@ export class AnthropicProvider implements ModelProvider {
     this.#maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
   }
 
-  async invoke({ model, request, signal }: ProviderCall): Promise<ModelResponse> {
+  async invoke({ model, request, signal, apiKey }: ProviderCall): Promise<ModelResponse> {
     const startedAt = performance.now();
+    // A tenant's own key gets its own client, built for this call and dropped
+    // with it (E3). Not cached: the constructor only assigns options — the SDK
+    // holds no connection — so a cache would buy nothing and would keep a
+    // customer's plaintext key alive past the request that needed it.
+    const client = apiKey === undefined ? this.#client : new Anthropic({ apiKey });
 
     let message: Anthropic.Message;
     try {
-      message = await this.#client.messages.create(
+      message = await client.messages.create(
         toCreateParams(model, request, this.#maxOutputTokens),
         signal ? { signal } : {},
       );

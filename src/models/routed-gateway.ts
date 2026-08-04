@@ -22,6 +22,7 @@ import { computeCostUsd } from '../telemetry/model-usage.js';
 
 import type { ModelGateway, ModelRequest, ModelResponse, TaskKind } from './model-gateway.js';
 import { ModelGatewayError } from './model-gateway.js';
+import type { ModelKeys } from './model-keys.js';
 import type { ModelProvider } from './model-provider.js';
 import type { ModelConfig, ResolvedCandidate } from './routing.js';
 import { candidatesFor } from './routing.js';
@@ -50,6 +51,11 @@ export interface RoutedGatewayOptions {
   readonly availability?: Availability;
   /** Injected in tests; defaults to the wall clock. */
   readonly now?: () => Date;
+  /**
+   * A tenant's own provider keys (E3). Absent means everyone is on the
+   * platform's, which is the posture before BYOM and stays the default.
+   */
+  readonly modelKeys?: ModelKeys;
 }
 
 const UNATTRIBUTED_TENANT = 'unattributed';
@@ -65,6 +71,7 @@ export class RoutedGateway implements ModelGateway {
   readonly #sleep: (ms: number) => Promise<void>;
   readonly #availability: Availability;
   readonly #now: () => Date;
+  readonly #modelKeys: ModelKeys | undefined;
 
   constructor(options: RoutedGatewayOptions) {
     this.#config = options.config;
@@ -77,6 +84,7 @@ export class RoutedGateway implements ModelGateway {
     this.#sleep = options.sleep ?? defaultSleep;
     this.#availability = options.availability ?? new InMemoryAvailability();
     this.#now = options.now ?? (() => new Date());
+    this.#modelKeys = options.modelKeys;
 
     // A route pointing at a provider nobody registered is a wiring mistake
     // that would otherwise surface only when that fallback is finally needed.
@@ -99,8 +107,14 @@ export class RoutedGateway implements ModelGateway {
     const { request: outgoing, compression } = this.#compress(request);
     const recorded = compression ? { compression } : {};
 
-    const candidates = candidatesFor(this.#config, outgoing.task);
     const tenantId = outgoing.attribution?.tenantId ?? this.#tenantId;
+    // Which providers this tenant brought a key for. Asked before routing
+    // rather than at the call, because it decides *which* candidates exist —
+    // and answered without unsealing anything.
+    const own = await this.#ownProviders(tenantId);
+    const all = candidatesFor(this.#config, outgoing.task);
+    const candidates = own.size === 0 ? all : all.filter((one) => own.has(one.provider));
+    const excluded = all.length - candidates.length;
     let attempts = 0;
     let lastError: ModelGatewayError | undefined;
     const skipped: Unavailable[] = [];
@@ -118,8 +132,13 @@ export class RoutedGateway implements ModelGateway {
         attempts += 1;
         const startedAt = performance.now();
 
+        // Unsealed here, for this provider only: a request that lands on the
+        // first candidate never decrypts the key for the second.
+        const apiKey = own.size === 0 ? null : await this.#tenantKey(tenantId, candidate.provider);
+        const billing = { billedTo: apiKey === null ? ('platform' as const) : ('tenant' as const) };
+
         try {
-          const response = await this.#invoke(candidate, outgoing);
+          const response = await this.#invoke(candidate, outgoing, apiKey);
           this.#availability.recordSuccess(providerScope(candidate.provider));
           this.#availability.recordSuccess(credentialScope(tenantId, candidate.reference));
           await this.#record(candidate, outgoing, {
@@ -127,6 +146,7 @@ export class RoutedGateway implements ModelGateway {
             latencyMs: response.latencyMs,
             attempts,
             succeeded: true,
+            ...billing,
             ...recorded,
           });
           return response;
@@ -140,6 +160,7 @@ export class RoutedGateway implements ModelGateway {
             attempts,
             succeeded: false,
             errorMessage: failure.message,
+            ...billing,
             ...recorded,
           });
 
@@ -175,7 +196,14 @@ export class RoutedGateway implements ModelGateway {
     const because = skipped
       .map((entry) => `${entry.scope} until ${entry.until.toISOString()} (${entry.reason})`)
       .join('; ');
-    const detail = lastError?.message ?? (because === '' ? 'no candidates' : `skipped ${because}`);
+    // A tenant with their own keys and no covered candidate is a configuration
+    // answer, not an outage — and the wrong one to report as "no candidates".
+    const byom =
+      excluded > 0 && candidates.length === 0
+        ? `this tenant brought their own model keys, and none of the ${String(excluded)} candidate(s) for this task uses a provider they have a key for`
+        : null;
+    const detail =
+      byom ?? lastError?.message ?? (because === '' ? 'no candidates' : `skipped ${because}`);
 
     throw new ModelGatewayError(
       `every model for task "${outgoing.task}" failed after ${attempts} attempt(s): ${detail}`,
@@ -248,13 +276,54 @@ export class RoutedGateway implements ModelGateway {
     }
   }
 
-  async #invoke(candidate: ResolvedCandidate, request: ModelRequest): Promise<ModelResponse> {
+  async #invoke(
+    candidate: ResolvedCandidate,
+    request: ModelRequest,
+    apiKey: string | null,
+  ): Promise<ModelResponse> {
     const provider = this.#providers.get(candidate.provider)!;
     return provider.invoke({
       model: candidate.model,
       request,
+      ...(apiKey === null ? {} : { apiKey }),
       signal: AbortSignal.timeout(this.#config.requestTimeoutMs),
     });
+  }
+
+  /**
+   * The providers this tenant brought their own key for.
+   *
+   * A failure here is not a reason to fall back to the platform's key: the
+   * resolver being unreachable says nothing about what the tenant chose, and
+   * guessing "they have none" would spend our money and send their data
+   * somewhere they may have deliberately excluded. So it is raised.
+   */
+  async #ownProviders(tenantId: string): Promise<Set<string>> {
+    if (!this.#modelKeys) {
+      return new Set();
+    }
+    try {
+      return new Set(await this.#modelKeys.providers(tenantId));
+    } catch (error) {
+      throw new ModelGatewayError(
+        `could not read the model keys for tenant "${tenantId}"`,
+        { provider: 'routed', task: 'simple', retryable: true, kind: 'credential' },
+        { cause: error },
+      );
+    }
+  }
+
+  /** The tenant's key for one provider, at the moment it is about to be used. */
+  async #tenantKey(tenantId: string, provider: string): Promise<string | null> {
+    try {
+      return (await this.#modelKeys?.resolve(tenantId, provider)) ?? null;
+    } catch (error) {
+      throw new ModelGatewayError(
+        `could not unseal the "${provider}" model key for tenant "${tenantId}"`,
+        { provider, task: 'simple', retryable: false, kind: 'credential' },
+        { cause: error },
+      );
+    }
   }
 
   async #record(

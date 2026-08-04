@@ -60,6 +60,8 @@ import { Router } from './router/router.js';
 import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 import { databaseProbe, type HealthProbe } from './lifecycle/health.js';
+import { ModelKeyVault } from './models/model-keys.js';
+import { PostgresModelKeyStore } from './models/postgres-model-keys.js';
 import { Lifecycle } from './lifecycle/shutdown.js';
 import { OtlpTraceRecorder, type OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
 import { RedactingTraceRecorder } from './telemetry/redacting-trace-recorder.js';
@@ -126,6 +128,12 @@ export interface Harness {
    * `readiness` and the pod goes out of the load balancer before anything
    * closes. See `src/lifecycle/`.
    */
+  /**
+   * A tenant's own provider keys (E3), or null with no master key configured —
+   * the same condition as `vault`, since they share the envelope. Bringing a
+   * key opts a tenant out of the platform's; see `src/models/model-keys.ts`.
+   */
+  readonly modelKeys: ModelKeyVault | null;
   readonly lifecycle: Lifecycle;
   /**
    * What `readiness` should check for this harness — the database, today.
@@ -242,6 +250,16 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const sessions = new RedactingSessionStore(new PostgresSessionStore(pool), redactor);
   const usageStore = new PostgresUsageRecorder(pool);
 
+  // The master key gates every sealed path: the credential vault below and a
+  // tenant's own model keys here. Read before the gateway, since BYOM changes
+  // which models a tenant is routed to at all.
+  const masterKey = options.masterEncryptionKey ?? process.env['MASTER_ENCRYPTION_KEY'];
+  const cipher = masterKey ? EnvelopeCipher.fromBase64(masterKey) : null;
+  const tenantKeys = new PostgresTenantKeyStore(pool);
+  const modelKeys = cipher
+    ? new ModelKeyVault(cipher, tenantKeys, new PostgresModelKeyStore(pool))
+    : null;
+
   const compressionProfile = options.compressionProfile ?? 'none';
   // A supplied gateway replaces the routed one outright — including the
   // providers, which is the point: constructing a provider needs its key, so
@@ -254,6 +272,10 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
       providers: routedProvidersFor(modelConfig),
       recorder: new RedactingUsageRecorder(usageStore, redactor),
       redactor,
+      // Absent with no master key: there is nowhere to have stored a tenant
+      // key, so everyone is on the platform's — which is the posture before
+      // BYOM and the right default.
+      ...(modelKeys ? { modelKeys } : {}),
       ...(compressionProfile === 'none' ? {} : { compressor: compressorFor(compressionProfile) }),
     });
   const tools = options.tools ?? new ToolRegistry();
@@ -264,13 +286,10 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 
   // The vault only exists if a master key is configured. Building it without
   // one would fail; skipping it lets a deployment that connects nothing run.
-  const masterKey = options.masterEncryptionKey ?? process.env['MASTER_ENCRYPTION_KEY'];
-  const vault = masterKey
-    ? new CredentialVault(
-        EnvelopeCipher.fromBase64(masterKey),
-        new PostgresTenantKeyStore(pool),
-        new PostgresCredentialStore(pool),
-      )
+  // It shares the cipher and the tenant key store with `modelKeys` above: one
+  // tenant, one data key, so revoking it covers everything that tenant owns.
+  const vault = cipher
+    ? new CredentialVault(cipher, tenantKeys, new PostgresCredentialStore(pool))
     : null;
 
   const connectors = options.connectors ?? new ConnectorRegistry();
@@ -328,6 +347,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     resourceCache,
     cachedConnections,
     mcpServer,
+    modelKeys,
     lifecycle: options.lifecycle ?? new Lifecycle(),
     probes: [databaseProbe(pool)],
     close: async () => {
@@ -519,7 +539,12 @@ export { ScriptedGateway, callsTool, says } from './models/scripted-gateway.js';
 export { loadModelConfig, parseModelConfig } from './models/routing.js';
 export type { ModelConfig, ModelEntry, ModelTier } from './models/routing.js';
 export { InMemoryUsageRecorder, computeCostUsd } from './telemetry/model-usage.js';
-export type { CompressionUsage, ModelUsageRecord, UsageRecorder } from './telemetry/model-usage.js';
+export type {
+  BilledTo,
+  CompressionUsage,
+  ModelUsageRecord,
+  UsageRecorder,
+} from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 export { InMemoryTraceRecorder, TurnTrace } from './telemetry/trace.js';
@@ -564,6 +589,9 @@ export type {
   LifecycleOptions,
   ShutdownSignalOptions,
 } from './lifecycle/shutdown.js';
+export { InMemoryModelKeys, ModelKeyError, ModelKeyVault } from './models/model-keys.js';
+export type { ModelKeys, ModelKeyStore } from './models/model-keys.js';
+export { PostgresModelKeyStore } from './models/postgres-model-keys.js';
 export { databaseProbe, liveness, readiness } from './lifecycle/health.js';
 export type {
   HealthProbe,

@@ -66,6 +66,16 @@ export async function disconnect(form: FormData): Promise<void> {
 async function origin(): Promise<string> {
   const header = await headers();
   const host = header.get('host') ?? '127.0.0.1:4100';
-  const proto = header.get('x-forwarded-proto') ?? (host.startsWith('127.') ? 'http' : 'https');
+  // A proxy that terminated TLS is the authority on the scheme. Failing that,
+  // a loopback host is plain HTTP — the console binds 127.0.0.1 with no
+  // certificate. `localhost` counts: providers often insist on that spelling
+  // over `127.0.0.1` in their redirect-URI lists, and guessing `https` for it
+  // produces a redirect_uri_mismatch that reads like a configuration typo.
+  const proto = header.get('x-forwarded-proto') ?? (isLoopback(host) ? 'http' : 'https');
   return `${proto}://${host}`;
+}
+
+function isLoopback(host: string): boolean {
+  const name = host.replace(/:\d+$/, '').toLowerCase();
+  return name === 'localhost' || name === '::1' || name === '[::1]' || name.startsWith('127.');
 }

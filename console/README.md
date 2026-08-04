@@ -98,4 +98,84 @@ Disconnecting erases the sealed credential and the connection. It does **not**
 revoke the token at the provider — only the source can do that, and claiming
 otherwise would leave a live token behind a console saying it is gone.
 
+### Running a real flow
+
+What you need, in order:
+
+**1. A database.** The console reads the harness's schema directly.
+
+```bash
+docker compose up -d
+npm run migrate up
+```
+
+**2. A master key.** Without it there is nowhere to seal a credential, and the
+page says so instead of showing a broken button.
+
+```bash
+echo "MASTER_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
+```
+
+**3. A tenant.** The console **fails** rather than creating one — a console that
+mints what it is meant to be showing you renders an empty dashboard that looks
+like a working one.
+
+```bash
+node --experimental-strip-types -e "
+  import('./dist/index.js').then(async ({ createHarness }) => {
+    const h = await createHarness();
+    console.log(await h.tenants.ensure({ slug: 'console', name: 'Console' }));
+    await h.close();
+  })"
+```
+
+**4. A provider.** In `config/connectors.json`, with the secret in the
+environment — never in the file, which is in Git.
+
+```json
+{
+  "google-drive": {
+    "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+    "tokenEndpoint": "https://oauth2.googleapis.com/token",
+    "clientId": "${GOOGLE_CLIENT_ID}",
+    "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+    "scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+    "authorizationParams": { "access_type": "offline", "prompt": "consent" }
+  }
+}
+```
+
+`access_type=offline` and `prompt=consent` are how Google is made to return a
+**refresh token**. Without them the connection works for an hour and then stops,
+which looks like the harness losing the credential rather than never having been
+given one.
+
+**5. The redirect URI, registered at the provider exactly as the browser will
+send it.** The console derives it from the request rather than from config — a
+value written in two places is one that will disagree — so whichever of these
+you browse to is the one to register:
+
+```
+http://localhost:4100/connections/callback
+http://127.0.0.1:4100/connections/callback
+```
+
+Google's console accepts both for a Web application client; some providers only
+accept the `localhost` spelling. Pick one and stay on it: they are different
+strings to a token endpoint, and a mismatch is rejected as
+`redirect_uri_mismatch`.
+
+Then `npm run console`, open **Connections**, and click connect.
+
+### If it fails
+
+- **`redirect_uri_mismatch`** — the URI you registered is not the one the
+  browser is on. Check the scheme and the spelling of the host.
+- **Connected, but stops working after an hour** — the provider granted no
+  refresh token. See `access_type`/`prompt` above.
+- **"the state does not match"** — the flow was started in a different browser
+  or more than ten minutes ago. Start again from the Connections page.
+- **"could not store the credential"** — the connection was undone on purpose;
+  the master key or the database is the thing to look at.
+
 Still to come: Approvals (2), Playground (3), Config (4), Evals (5).

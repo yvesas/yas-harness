@@ -1,5 +1,9 @@
 name: yas-harness
 
+# `docker compose up` gives Postgres, the schema, a tenant and the console —
+# the whole thing, in one command. For working on the harness from source
+# instead, `docker compose up postgres` is the database on its own.
+
 services:
   postgres:
     # pgvector ships on top of the official Postgres image; one database serves
@@ -21,6 +25,63 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  # Runs once and exits. The schema has to exist before anything opens a
+  # connection, and a console that starts first would spend its first page load
+  # explaining that a table is missing.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: yas-harness-migrate
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-harness}:${POSTGRES_PASSWORD:-harness}@postgres:5432/${POSTGRES_DB:-harness}
+    command: ['up']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Also runs once. The console refuses to create its own tenant on purpose —
+  # see scripts/ensure-tenant.mjs — so the creation is a step somebody can read
+  # in this file rather than a side effect of opening a page.
+  seed:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: yas-harness-seed
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-harness}:${POSTGRES_PASSWORD:-harness}@postgres:5432/${POSTGRES_DB:-harness}
+      TENANT_SLUG: ${CONSOLE_TENANT_SLUG:-console}
+    entrypoint: ['node', 'scripts/ensure-tenant.mjs']
+    command: []
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  console:
+    build:
+      context: .
+      dockerfile: console/Dockerfile
+    container_name: yas-console
+    restart: unless-stopped
+    environment:
+      # `postgres:5432` is the service on the compose network. The host's 4000
+      # is a published port and does not exist in here.
+      DATABASE_URL: postgres://${POSTGRES_USER:-harness}:${POSTGRES_PASSWORD:-harness}@postgres:5432/${POSTGRES_DB:-harness}
+      CONSOLE_TENANT_SLUG: ${CONSOLE_TENANT_SLUG:-console}
+      # Optional. Without it the vault is not built and the Connections page
+      # says which of the two things it needs is missing.
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
+      CONSOLE_OPERATOR: ${CONSOLE_OPERATOR:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    ports:
+      # Bound to loopback on the host, deliberately. The console holds the
+      # master key; reaching it from the network is a decision that needs the
+      # authentication this version does not have.
+      - '127.0.0.1:${CONSOLE_PORT:-4100}:4100'
+    depends_on:
+      seed:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:

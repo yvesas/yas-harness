@@ -30,7 +30,14 @@ export function harness(): Promise<Harness> {
   const holder = globalThis as CacheHolder;
   // The *promise* is cached, not the result: two requests during a cold start
   // would otherwise each open their own pool.
-  holder[CACHE] ??= createHarness({ modules: buildModules(poolStore) });
+  // `configDir` is named rather than left to `process.cwd()`. Next's standalone
+  // server runs from its own directory, so the default would look for the
+  // harness's config inside the console's folder — which is how this failed the
+  // first time it ran in a container.
+  holder[CACHE] ??= createHarness({
+    modules: buildModules(poolStore),
+    ...(process.env['CONFIG_DIR'] === undefined ? {} : { configDir: process.env['CONFIG_DIR'] }),
+  });
   return holder[CACHE];
 }
 

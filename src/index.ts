@@ -18,6 +18,7 @@ import type { ApprovalStore } from './approval/approval-store.js';
 import { CachedConnections } from './connections/cached-connections.js';
 import { ConnectionManager } from './connections/connection-manager.js';
 import { ConnectionOnboarding } from './connections/connection-onboarding.js';
+import { LazyProvider } from './models/lazy-provider.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
 import type { CredentialResolver } from './connections/credential-resolver.js';
@@ -201,11 +202,24 @@ export interface HarnessOptions {
  * Only the providers the configuration actually routes to are constructed, so a
  * deployment that uses one provider does not need the other's credentials.
  */
+/**
+ * The providers this configuration routes to, each built on first use.
+ *
+ * Lazily, because a provider reads its key in its constructor: building them
+ * here meant a key was required to do things that never touch a model — create
+ * a tenant, read a trace, show a cost table. The wiring check is unaffected,
+ * since a `LazyProvider` knows its name from the start; only the credential
+ * requirement moves, to the moment the model is actually called.
+ */
 function routedProvidersFor(modelConfig: Awaited<ReturnType<typeof loadModelConfig>>) {
   const routed = new Set(Object.values(modelConfig.models).map((entry) => entry.provider));
   const providers: ModelProvider[] = [];
-  if (routed.has('anthropic')) providers.push(new AnthropicProvider());
-  if (routed.has('groq')) providers.push(new GroqProvider());
+  if (routed.has('anthropic')) {
+    providers.push(new LazyProvider('anthropic', () => new AnthropicProvider()));
+  }
+  if (routed.has('groq')) {
+    providers.push(new LazyProvider('groq', () => new GroqProvider()));
+  }
   return providers;
 }
 
@@ -614,6 +628,7 @@ export type {
   LifecycleOptions,
   ShutdownSignalOptions,
 } from './lifecycle/shutdown.js';
+export { LazyProvider } from './models/lazy-provider.js';
 export { InMemoryModelKeys, ModelKeyError, ModelKeyVault } from './models/model-keys.js';
 export type { ModelKeys, ModelKeyStore } from './models/model-keys.js';
 export { PostgresModelKeyStore } from './models/postgres-model-keys.js';

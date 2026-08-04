@@ -5,7 +5,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 console/.next/
-console/next-env.d.ts.bak
+# Next regenerates this on every build, which strips the license header the
+# check would otherwise want. It is generated output, so it is not committed.
+console/next-env.d.ts
 
 # test output
 coverage/

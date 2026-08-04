@@ -152,6 +152,20 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **Spend reads back grouped, and the page that asked shaped the port (F6.6).**
+  `spend()` stays — "what has this tenant cost" has one honest answer — and
+  `breakdown()` answers "where did it go", by model, task, day or session,
+  dearest first. This is the method doc 21 argued for rather than an exception
+  to it: the Cost page shipped stating what it could not show, and the port
+  followed. Two calls inside it. **The dimension is a lookup, never
+  interpolation** — it becomes SQL through a fixed table of expressions, because
+  this is the query an operator surface drives from a URL. **A null key is
+  excluded, not bucketed**: a call made outside a conversation belongs to no
+  session, and gathering those under "none" would put the biggest, unclickable
+  row at the top of the page (they remain in the total). `savings()` returns
+  **null** when compression never ran, which is a different answer from having
+  saved nothing, and reports both token counts rather than a ratio — a ratio
+  hides how much of the traffic compression even touched.
 - **The console lives in this repository, and the Golden Rule stops at `src/`
   (F7.1, phase 0).** It is one product: a harness nobody can see is a library
   with a promise, and the console with no harness is an empty page. One repo

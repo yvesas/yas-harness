@@ -5,3 +5,4 @@ node_modules
 
 # the console's build output
 console/.next
+console/next-env.d.ts

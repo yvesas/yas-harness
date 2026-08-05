@@ -132,23 +132,45 @@ node --experimental-strip-types -e "
 **4. A provider.** In `config/connectors.json`, with the secret in the
 environment — never in the file, which is in Git.
 
+**Which one to start with matters.** The point of a first real flow is to prove
+the *flow*, so pick the provider with the least setup between you and a consent
+screen:
+
+| | What it costs to get an OAuth app |
+| --- | --- |
+| **GitHub** ⭐ | A free personal account. Settings → Developer settings → OAuth Apps. No organisation, no billing, no review, and a `localhost` callback is accepted. Minutes. |
+| **Notion** | A free account and an integration. Nearly as quick. |
+| **Google** | Free, but a consent screen to configure, scopes to justify, and your own account added as a test user before anything works. |
+| **Atlassian** | Free tier exists, but you need a Cloud **site** for Jira or Confluence to exist against, and the app is created per-site. More moving parts. |
+
+Start with GitHub. Once the flow is proven end to end, the others are the same
+four fields in the same file — the harness does not care which is behind them,
+and that is the thing being tested.
+
 ```json
 {
-  "google-drive": {
-    "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
-    "tokenEndpoint": "https://oauth2.googleapis.com/token",
-    "clientId": "${GOOGLE_CLIENT_ID}",
-    "clientSecret": "${GOOGLE_CLIENT_SECRET}",
-    "scopes": ["https://www.googleapis.com/auth/drive.readonly"],
-    "authorizationParams": { "access_type": "offline", "prompt": "consent" }
+  "github": {
+    "authorizationEndpoint": "https://github.com/login/oauth/authorize",
+    "tokenEndpoint": "https://github.com/login/oauth/access_token",
+    "clientId": "your-client-id",
+    "clientSecretEnv": "GITHUB_CLIENT_SECRET",
+    "scopes": ["repo", "read:org"]
   }
 }
 ```
 
-`access_type=offline` and `prompt=consent` are how Google is made to return a
-**refresh token**. Without them the connection works for an hour and then stops,
-which looks like the harness losing the credential rather than never having been
-given one.
+The secret is **named**, not written: `clientSecretEnv` says which environment
+variable holds it, and the value stays in `.env`. The client *id* is not a
+secret and belongs in the file. `config/connectors.example.json` has an entry
+for every connector that ships — copy the one you want.
+
+**Refresh tokens are the trap, and it differs per provider.** A GitHub OAuth App
+token does not expire, so there is nothing to arrange. Google returns a refresh
+token only with `access_type=offline` **and** `prompt=consent`; Atlassian only
+with the `offline_access` scope. Without them the connection works for an hour
+and then stops — which looks like the harness losing the credential rather than
+never having been given one. The example file already carries the right
+parameters for each.
 
 **5. The redirect URI, registered at the provider exactly as the browser will
 send it.** The console derives it from the request rather than from config — a

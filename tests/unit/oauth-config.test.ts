@@ -23,9 +23,23 @@ describe('connectors config schema', () => {
     expect(connectorsConfigSchema.safeParse({ atlassian: validEntry }).success).toBe(true);
   });
 
-  it('rejects an entry with no scopes', () => {
+  it('accepts an entry with no scopes, because some providers take none', () => {
     const parsed = connectorsConfigSchema.safeParse({
-      atlassian: { ...validEntry, scopes: [] },
+      notion: { ...validEntry, scopes: [] },
+    });
+
+    // This assertion used to be the opposite, and the shipped example was
+    // unloadable because of it. Notion has no `scope` parameter at all — an
+    // integration's capabilities are set where the integration is defined — so
+    // requiring one demanded a value the provider ignores.
+    expect(parsed.success).toBe(true);
+  });
+
+  it('still rejects a scope that is an empty string', () => {
+    // Empty *list* and empty *entry* are different mistakes: the first is a
+    // provider that takes no scopes, the second is a typo.
+    const parsed = connectorsConfigSchema.safeParse({
+      atlassian: { ...validEntry, scopes: [''] },
     });
     expect(parsed.success).toBe(false);
   });

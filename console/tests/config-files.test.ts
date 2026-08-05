@@ -115,8 +115,8 @@ describe('validating a draft', () => {
       'google-drive': {
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         tokenEndpoint: 'https://oauth2.googleapis.com/token',
-        clientId: '${GOOGLE_CLIENT_ID}',
-        clientSecret: '${GOOGLE_CLIENT_SECRET}',
+        clientId: 'a-client-id',
+        clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
         scopes: ['drive.readonly'],
       },
     };
@@ -124,6 +124,23 @@ describe('validating a draft', () => {
     // Checked as a shape, not through the loader that reads the environment: a
     // secret unset on this machine is not a reason to refuse somebody's edit.
     expect(validate('connectors.json', JSON.stringify(connectors))).toBeNull();
+  });
+
+  it('refuses a secret written into the file', () => {
+    const withSecret = {
+      drive: {
+        authorizationEndpoint: 'https://x/auth',
+        tokenEndpoint: 'https://x/token',
+        clientId: 'a-client-id',
+        clientSecretEnv: 'DRIVE_CLIENT_SECRET',
+        clientSecret: 'the-actual-secret',
+      },
+    };
+
+    // The most damaging thing this file could contain, and an easy mistake to
+    // make: `clientSecretEnv` names a variable, it does not hold the secret.
+    // This is the last point before it reaches Git.
+    expect(validate('connectors.json', JSON.stringify(withSecret))).toMatch(/Secrets do not go/);
   });
 
   it('names the connector that is incomplete', () => {
@@ -150,14 +167,14 @@ describe('saving', () => {
     await expect(readFile(join(dir, 'models.json'), 'utf8')).rejects.toThrow();
   });
 
-  it('keeps a secret placeholder exactly as written', async () => {
+  it('writes the name of the secret’s variable, never a secret', async () => {
     const text = JSON.stringify(
       {
         drive: {
           authorizationEndpoint: 'https://x/auth',
           tokenEndpoint: 'https://x/token',
-          clientId: '${DRIVE_CLIENT_ID}',
-          clientSecret: '${DRIVE_CLIENT_SECRET}',
+          clientId: 'a-client-id',
+          clientSecretEnv: 'DRIVE_CLIENT_SECRET',
         },
       },
       null,
@@ -166,11 +183,10 @@ describe('saving', () => {
 
     await save('connectors.json', text);
 
-    // Resolving on save would write a live client secret into a file that goes
-    // to Git.
-    expect(await readFile(join(dir, 'connectors.json'), 'utf8')).toContain(
-      '${DRIVE_CLIENT_SECRET}',
-    );
+    const written = await readFile(join(dir, 'connectors.json'), 'utf8');
+    expect(written).toContain('DRIVE_CLIENT_SECRET');
+    // The variable's name, not its value: this file is in Git.
+    expect(written).not.toContain('clientSecret"');
   });
 });
 

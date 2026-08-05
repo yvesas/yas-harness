@@ -133,10 +133,19 @@ function shapeOfConnectors(parsed: unknown): void {
     if (typeof value !== 'object' || value === null) {
       throw new ConfigError(`"${connectorId}" must be an object`);
     }
-    for (const field of ['authorizationEndpoint', 'tokenEndpoint', 'clientId']) {
+    for (const field of ['authorizationEndpoint', 'tokenEndpoint', 'clientId', 'clientSecretEnv']) {
       if (typeof (value as Record<string, unknown>)[field] !== 'string') {
         throw new ConfigError(`"${connectorId}" is missing "${field}"`);
       }
+    }
+    if ('clientSecret' in (value as Record<string, unknown>)) {
+      // The single most damaging thing somebody could put in this file, and an
+      // easy mistake: `clientSecretEnv` names a variable, it does not hold the
+      // secret. Refusing here is the last point before it reaches Git.
+      throw new ConfigError(
+        `"${connectorId}" has a "clientSecret" field. Secrets do not go in this file — ` +
+          'name the environment variable in "clientSecretEnv" instead.',
+      );
     }
   }
 }

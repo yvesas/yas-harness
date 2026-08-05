@@ -152,6 +152,13 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **`npm run check` builds before it tests.** The console's own tests import
+  `yas-harness` **as built**, because that is how the console imports it — so
+  they run against `dist/`, and `dist/` is only as fresh as the last build.
+  Changing a parser and running `check` therefore passed locally against
+  yesterday's output and failed in CI, which compiles on install. A gate that
+  can be green on stale artefacts is not a gate; the build now runs first, and
+  the local command exercises what CI does.
 - **A provider is configuration, not a file in `src/models/`.** The ports were
   always vendor-neutral, but the composition root was not: it read
   `if (routed.has('anthropic'))`, so adding a provider meant editing the

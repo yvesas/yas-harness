@@ -99,7 +99,7 @@ const tenant = await harness.tenants.ensure({ slug: 'acme', name: 'Acme' });
 | `npm run dev` | Run the harness with reload on change |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm test` | Run the test suite |
-| `npm run check` | Lint, typecheck and test — run this before committing |
+| `npm run check` | Lint, typecheck, **build** and test — run this before committing |
 | `npm run package:check` | Pack, install into a throwaway project and import by name |
 | `npm run isolation` | Prove the schema isolates tenants — every table, every key |
 | `npm run migrate up\|down\|status` | Apply, roll back or inspect migrations |

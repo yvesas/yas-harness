@@ -8,6 +8,12 @@
  * arriving from a form is input, and a client secret must not make a round trip
  * through a web page on its way back to disk.
  *
+ * It exercises `yas-harness` **as built**, not as source — the console imports
+ * the package by name. So `npm run check` compiles before it tests: without
+ * that, a change to a parser passes here against yesterday's `dist/` and fails
+ * in CI, which is exactly how this file first went green on a rule it was
+ * breaking.
+ *
  * It lives in `console/` rather than `tests/` because the code it exercises
  * does. Those files are compiled by the console's tsconfig — bundler
  * resolution, extensionless imports — and the harness's uses NodeNext, where
@@ -31,15 +37,23 @@ import { diff } from '../lib/config-shape';
  * fixture wrong the first time is how that rule got demonstrated.
  */
 const VALID_MODELS = {
+  providers: {
+    fast: {
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.test/v1',
+      apiKeyEnv: 'FAST_MODEL_API_KEY',
+    },
+    premium: { kind: 'anthropic', apiKeyEnv: 'PREMIUM_MODEL_API_KEY' },
+  },
   models: {
     cheap: {
-      provider: 'groq',
+      provider: 'fast',
       model: 'llama',
       tier: 'cheap',
       price: { inputPerMTok: 1, outputPerMTok: 2, cachedInputPerMTok: 0.5 },
     },
     good: {
-      provider: 'anthropic',
+      provider: 'premium',
       model: 'opus',
       tier: 'premium',
       price: { inputPerMTok: 10, outputPerMTok: 20, cachedInputPerMTok: 1 },

@@ -1,6 +1,4 @@
 {
-  "//": "Copy to connectors.json and fill in. Each key is a CONNECTOR ID (the connection's connectorId) — so confluence and jira each get an entry even though they share Atlassian OAuth. The client secret is NOT here — name its environment variable in clientSecretEnv and set that. A missing connectors.json is fine; the connection layer then runs without OAuth.",
-
   "confluence": {
     "authorizationEndpoint": "https://auth.atlassian.com/authorize",
     "tokenEndpoint": "https://auth.atlassian.com/oauth/token",

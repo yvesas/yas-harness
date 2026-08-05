@@ -23,7 +23,15 @@ export const oauthProviderConfigSchema = z.object({
   clientId: z.string().min(1),
   /** The environment variable holding the client secret — not the secret. */
   clientSecretEnv: z.string().min(1),
-  scopes: z.array(z.string().min(1)).min(1),
+  /**
+   * What to ask for, if this provider takes it in the authorization request.
+   *
+   * May be empty: Notion, for one, has no `scope` parameter — an integration's
+   * capabilities are set where the integration is defined, and sending scopes
+   * would be sending a parameter the provider ignores. Requiring at least one
+   * made the shipped example unloadable.
+   */
+  scopes: z.array(z.string().min(1)),
   authorizationParams: z.record(z.string(), z.string()).optional(),
 });
 

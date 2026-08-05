@@ -28,7 +28,7 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | Port | Defined in | Adapters |
 | --- | --- | --- |
 | `ModelGateway` | `src/models/model-gateway.ts` | `RoutedGateway`, `ScriptedGateway` |
-| `ModelProvider` | `src/models/model-provider.ts` | `AnthropicProvider`, `GroqProvider` |
+| `ModelProvider` | `src/models/model-provider.ts` | `OpenAiCompatibleProvider` (most vendors, by base URL), `AnthropicProvider` |
 | `SessionStore` | `src/memory/session-store.ts` | `PostgresSessionStore`, `InMemorySessionStore` |
 | `PoolStore` | `src/pools/pool-store.ts` | `PostgresPoolStore`, `InMemoryPoolStore` |
 | `ApprovalStore` | `src/approval/approval-store.ts` | `PostgresApprovalStore`, `InMemoryApprovalStore` |
@@ -62,7 +62,7 @@ without a network or an API bill.
                     └──────────┬──────────┘  └───────┬─────────────┘
                                │ ModelProvider       │
                     ┌──────────▼──────────┐  ┌────────▼────────────┐
-                    │ Anthropic  ·  Groq  │  │ PostgreSQL + pgvector│
+                    │  model providers    │  │ PostgreSQL + pgvector│
                     └─────────────────────┘  └─────────────────────┘
 ```
 

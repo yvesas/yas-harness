@@ -2,16 +2,29 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Adapter: Groq behind the ModelProvider port.
+ * Adapter: any OpenAI-compatible chat API behind the `ModelProvider` port.
  *
- * Groq exposes an OpenAI-compatible chat API, which is a different shape from
- * the port's: tool results are their own messages rather than parts of a user
- * turn, and tool arguments travel as a JSON string. That translation is the
- * whole job of this file, and the reason the core never sees either detail.
+ * One adapter rather than one per vendor, because the vendors converged. The
+ * `/chat/completions` shape is what Groq, Together, Fireworks, DeepInfra,
+ * Cerebras, SambaNova, Mistral, xAI, OpenRouter, Nebius and OpenAI itself all
+ * speak — and what a local vLLM, Ollama or LM Studio serves. Google's Gemini
+ * exposes a compatible endpoint too. A vendor is therefore **configuration**:
+ * a base URL, a key, a name. Adding one is an entry in `config/models.json`,
+ * not a file in this folder.
+ *
+ * The shape differs from the port's: tool results are their own messages rather
+ * than parts of a user turn, and tool arguments travel as a JSON string. That
+ * translation is the whole job of this file, and the reason the core never sees
+ * either detail.
  *
  * Written against `fetch` rather than a client library: the surface used here
  * is three fields wide, and a dependency would buy nothing but a version to
  * keep up with.
+ *
+ * What it does **not** cover is a provider's own extensions — prompt caching
+ * with explicit cache breakpoints, for instance. A vendor whose distinguishing
+ * feature the harness wants gets a native adapter beside this one; a vendor
+ * that is a fast, cheap endpoint does not need one.
  */
 
 import type {
@@ -26,17 +39,30 @@ import type {
 import { ModelGatewayError } from './model-gateway.js';
 import type { ModelProvider, ProviderCall } from './model-provider.js';
 
-const PROVIDER = 'groq';
-const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const DEFAULT_MAX_OUTPUT_TOKENS = 8_000;
 
 /** Status codes worth another attempt: rate limits and provider-side faults. */
 const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
 
-export interface GroqProviderOptions {
-  /** Defaults to GROQ_API_KEY. */
+export interface OpenAiCompatibleOptions {
+  /**
+   * How this provider is named in `config/models.json`, and in every trace and
+   * cost row. The harness has no opinion about it — `groq`, `together`,
+   * `local`, whatever the deployment calls the thing it is talking to.
+   */
+  readonly name: string;
+  /** Where `/chat/completions` lives, e.g. `https://api.groq.com/openai/v1`. */
+  readonly baseUrl: string;
+  /**
+   * Which environment variable holds the key.
+   *
+   * Named by configuration rather than fixed in code: a vendor's convention is
+   * the vendor's, and a harness that hardcodes one has picked a vendor. Two
+   * deployments of the same provider can even use different variables.
+   */
+  readonly apiKeyEnv?: string;
+  /** The key itself, when a caller would rather pass it than name a variable. */
   readonly apiKey?: string;
-  readonly baseUrl?: string;
   readonly maxOutputTokens?: number;
   /** Injected in tests. */
   readonly fetch?: typeof globalThis.fetch;
@@ -65,25 +91,27 @@ interface ChatCompletion {
   };
 }
 
-export class GroqProvider implements ModelProvider {
-  readonly name = PROVIDER;
+export class OpenAiCompatibleProvider implements ModelProvider {
+  readonly name: string;
   readonly #apiKey: string;
   readonly #baseUrl: string;
   readonly #maxOutputTokens: number;
   readonly #fetch: typeof globalThis.fetch;
 
-  constructor(options: GroqProviderOptions = {}) {
-    const apiKey = options.apiKey ?? process.env['GROQ_API_KEY'];
+  constructor(options: OpenAiCompatibleOptions) {
+    this.name = options.name;
+    const apiKey =
+      options.apiKey ?? (options.apiKeyEnv ? process.env[options.apiKeyEnv] : undefined);
     if (!apiKey) {
-      throw new ModelGatewayError('GROQ_API_KEY is not set', {
-        provider: PROVIDER,
-        task: 'simple',
-        retryable: false,
-      });
+      // Names the variable the deployment chose, not one this file assumed.
+      throw new ModelGatewayError(
+        `${options.apiKeyEnv ?? `the API key for "${options.name}"`} is not set`,
+        { provider: options.name, task: 'simple', retryable: false },
+      );
     }
 
     this.#apiKey = apiKey;
-    this.#baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+    this.#baseUrl = options.baseUrl;
     this.#maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     this.#fetch = options.fetch ?? globalThis.fetch;
   }
@@ -124,22 +152,22 @@ export class GroqProvider implements ModelProvider {
     } catch (error) {
       // A transport failure never reached the provider, so it is worth another
       // attempt — including the gateway's own timeout aborting the request.
-      throw new ModelGatewayError(`groq request failed: ${errorMessage(error)}`, {
-        provider: PROVIDER,
+      throw new ModelGatewayError(`${this.name} request failed: ${errorMessage(error)}`, {
+        provider: this.name,
         task: request.task,
         retryable: true,
       });
     }
 
     if (!response.ok) {
-      throw await toHttpError(response, request.task);
+      throw await toHttpError(this.name, response, request.task);
     }
 
     const completion = (await response.json()) as ChatCompletion;
     const choice = completion.choices[0];
     if (!choice) {
-      throw new ModelGatewayError('groq returned no choices', {
-        provider: PROVIDER,
+      throw new ModelGatewayError(`${this.name} returned no choices`, {
+        provider: this.name,
         task: request.task,
         retryable: true,
       });
@@ -262,7 +290,11 @@ function toUsage(usage: ChatCompletion['usage']): TokenUsage {
   };
 }
 
-async function toHttpError(response: Response, task: TaskKind): Promise<ModelGatewayError> {
+async function toHttpError(
+  provider: string,
+  response: Response,
+  task: TaskKind,
+): Promise<ModelGatewayError> {
   const body = await response.text().catch(() => '');
   const retryable = RETRYABLE_STATUS.has(response.status);
   // 429 is this key's quota; 5xx is the provider. Backing off the wrong one
@@ -271,8 +303,8 @@ async function toHttpError(response: Response, task: TaskKind): Promise<ModelGat
   const seconds = Number(response.headers.get('retry-after'));
   const retryAfterMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
 
-  return new ModelGatewayError(`groq responded ${response.status}: ${body.slice(0, 500)}`, {
-    provider: PROVIDER,
+  return new ModelGatewayError(`${provider} responded ${response.status}: ${body.slice(0, 500)}`, {
+    provider,
     task,
     retryable,
     kind: credential ? 'credential' : retryable ? 'provider' : 'request',

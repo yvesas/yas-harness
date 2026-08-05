@@ -17,6 +17,14 @@ const TENANT = 'tenant-1';
 
 const config = parseModelConfig(
   {
+    providers: {
+      groq: {
+        kind: 'openai-compatible',
+        baseUrl: 'https://api.example.test/v1',
+        apiKeyEnv: 'FAST_KEY',
+      },
+      anthropic: { kind: 'anthropic', apiKeyEnv: 'PREMIUM_KEY' },
+    },
     models: {
       cheap: {
         provider: 'groq',

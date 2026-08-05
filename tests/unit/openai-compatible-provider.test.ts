@@ -2,17 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * The Groq adapter, driven by a stub fetch.
+ * The OpenAI-compatible adapter, driven by a stub fetch.
  *
- * What matters here is the translation: the port's shape is not Groq's, and
+ * One adapter for every vendor speaking `/chat/completions` — Groq, Together,
+ * Fireworks, Cerebras, a local vLLM, OpenAI itself. The provider is named and
+ * addressed by configuration, so these tests use a made-up one: if anything
+ * here depended on which vendor it is, that would be the bug.
+ *
+ * What matters is the translation: the port's shape is not that API's, and
  * every difference this file gets wrong would surface as a broken tool loop.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { GroqProvider } from '../../src/models/groq-provider.js';
+import { OpenAiCompatibleProvider } from '../../src/models/openai-compatible-provider.js';
 import type { ModelRequest } from '../../src/models/model-gateway.js';
 import { ModelGatewayError, userMessage } from '../../src/models/model-gateway.js';
+
+const BASE_URL = 'https://api.example.test/v1';
 
 interface ChatBody {
   model: string;
@@ -52,12 +59,17 @@ function completion(overrides: Record<string, unknown> = {}) {
 }
 
 function provider(fetch: typeof globalThis.fetch) {
-  return new GroqProvider({ apiKey: 'test-key', fetch });
+  return new OpenAiCompatibleProvider({
+    name: 'fast',
+    baseUrl: BASE_URL,
+    apiKey: 'test-key',
+    fetch,
+  });
 }
 
 const request: ModelRequest = { task: 'simple', messages: [userMessage('oi')] };
 
-describe('GroqProvider', () => {
+describe('OpenAiCompatibleProvider', () => {
   it('returns the answer and the token usage', async () => {
     const { fetch } = stubFetch(completion());
 
@@ -195,7 +207,7 @@ describe('GroqProvider', () => {
     const { fetch } = stubFetch({ error: 'slow down' }, { status: 429 });
 
     await expect(provider(fetch).invoke({ model: 'llama', request })).rejects.toMatchObject({
-      detail: { retryable: true, provider: 'groq' },
+      detail: { retryable: true, provider: 'fast' },
     });
   });
 
@@ -216,8 +228,14 @@ describe('GroqProvider', () => {
   });
 
   it('refuses to start without an API key', () => {
-    expect(() => new GroqProvider({ apiKey: '', fetch: globalThis.fetch })).toThrow(
-      ModelGatewayError,
-    );
+    expect(
+      () =>
+        new OpenAiCompatibleProvider({
+          name: 'fast',
+          baseUrl: BASE_URL,
+          apiKey: '',
+          fetch: globalThis.fetch,
+        }),
+    ).toThrow(ModelGatewayError);
   });
 });

@@ -45,9 +45,8 @@ import { PostgresSessionStore } from './memory/postgres-session-store.js';
 import { RedactingSessionStore } from './memory/redacting-session-store.js';
 import type { SessionStore } from './memory/session-store.js';
 import { AnthropicProvider } from './models/anthropic-provider.js';
-import { GroqProvider } from './models/groq-provider.js';
+import { OpenAiCompatibleProvider } from './models/openai-compatible-provider.js';
 import type { ModelGateway } from './models/model-gateway.js';
-import type { ModelProvider } from './models/model-provider.js';
 import { RoutedGateway } from './models/routed-gateway.js';
 import { loadModelConfig } from './models/routing.js';
 import { ModuleRegistry } from './modules/module.js';
@@ -213,14 +212,19 @@ export interface HarnessOptions {
  */
 function routedProvidersFor(modelConfig: Awaited<ReturnType<typeof loadModelConfig>>) {
   const routed = new Set(Object.values(modelConfig.models).map((entry) => entry.provider));
-  const providers: ModelProvider[] = [];
-  if (routed.has('anthropic')) {
-    providers.push(new LazyProvider('anthropic', () => new AnthropicProvider()));
-  }
-  if (routed.has('groq')) {
-    providers.push(new LazyProvider('groq', () => new GroqProvider()));
-  }
-  return providers;
+
+  return [...routed].map((name) => {
+    const entry = modelConfig.providers[name]!;
+    return new LazyProvider(name, () =>
+      entry.kind === 'anthropic'
+        ? new AnthropicProvider({ apiKeyEnv: entry.apiKeyEnv })
+        : new OpenAiCompatibleProvider({
+            name,
+            baseUrl: entry.baseUrl!,
+            apiKeyEnv: entry.apiKeyEnv,
+          }),
+    );
+  });
 }
 
 /**
@@ -545,7 +549,8 @@ export { InMemorySessionStore } from './memory/in-memory-session-store.js';
 export { PostgresSessionStore } from './memory/postgres-session-store.js';
 export type { Session, SessionStore, StoredMessage } from './memory/session-store.js';
 export { AnthropicProvider } from './models/anthropic-provider.js';
-export { GroqProvider } from './models/groq-provider.js';
+export { OpenAiCompatibleProvider } from './models/openai-compatible-provider.js';
+export type { OpenAiCompatibleOptions } from './models/openai-compatible-provider.js';
 export { ModelGatewayError } from './models/model-gateway.js';
 export type {
   FailureKind,

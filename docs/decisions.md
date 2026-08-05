@@ -152,6 +152,35 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **`npm run check` builds before it tests.** The console's own tests import
+  `yas-harness` **as built**, because that is how the console imports it — so
+  they run against `dist/`, and `dist/` is only as fresh as the last build.
+  Changing a parser and running `check` therefore passed locally against
+  yesterday's output and failed in CI, which compiles on install. A gate that
+  can be green on stale artefacts is not a gate; the build now runs first, and
+  the local command exercises what CI does.
+- **A provider is configuration, not a file in `src/models/`.** The ports were
+  always vendor-neutral, but the composition root was not: it read
+  `if (routed.has('anthropic'))`, so adding a provider meant editing the
+  harness. `config/models.json` now declares them — kind, base URL, and **which
+  environment variable holds the key** — and the harness builds what it is told
+  to. Three consequences. **One adapter covers most of the market**: the vendors
+  converged on `/chat/completions`, so `OpenAiCompatibleProvider` reaches Groq,
+  Together, Fireworks, Cerebras, Mistral, xAI, OpenRouter, OpenAI itself, a
+  local vLLM or Ollama, and Google's compatible endpoint — parameterised by base
+  URL, knowing the wire format and nothing about whose endpoint is behind it.
+  **A native adapter needs a capability, not a logo**: `anthropic` stays a
+  separate kind because that API is a different shape and has explicit cache
+  breakpoints the harness uses; a vendor that is merely a fast, cheap endpoint
+  does not get one. **The key variable is named by configuration**, since a
+  vendor's convention is the vendor's and hardcoding one is picking a vendor.
+  The shipped config names its providers `premium` and `fast` — by the role they
+  play rather than by who sells them, so swapping the vendor behind one is a
+  base URL. What stays vendor-named is the adapter file, because an anonymous
+  adapter for a named API would be unreadable; the core, the ports and the
+  composition root say nothing. `providers` is **required**, which broke five
+  test fixtures — the honest price, since the only way to infer it would be to
+  hardcode the vendor names this removes.
 - **The console edits configuration files, and validates them with the
   harness's own parsers (console phases 4 and 5).** Configuration stays in
   `config/*.json` under Git: a table would cost the history, the review of a

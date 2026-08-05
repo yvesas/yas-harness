@@ -51,8 +51,16 @@ interface EmittedMessage {
 }
 
 export interface AnthropicProviderOptions {
-  /** Defaults to the SDK's own resolution (ANTHROPIC_API_KEY, or a profile). */
+  /** Defaults to the SDK's own resolution (its conventional variable, or a profile). */
   readonly apiKey?: string;
+  /**
+   * Which environment variable holds the key, when a deployment names its own.
+   *
+   * Configuration rather than a constant here: `config/models.json` decides,
+   * so nothing in the harness commits to one vendor's naming convention. Left
+   * unset, the SDK resolves the key the way it always has.
+   */
+  readonly apiKeyEnv?: string;
   readonly maxOutputTokens?: number;
   /** Injected in tests; production leaves it unset. */
   readonly client?: Anthropic;
@@ -64,9 +72,9 @@ export class AnthropicProvider implements ModelProvider {
   readonly #maxOutputTokens: number;
 
   constructor(options: AnthropicProviderOptions = {}) {
-    this.#client =
-      options.client ??
-      new Anthropic(options.apiKey === undefined ? {} : { apiKey: options.apiKey });
+    const apiKey =
+      options.apiKey ?? (options.apiKeyEnv ? process.env[options.apiKeyEnv] : undefined);
+    this.#client = options.client ?? new Anthropic(apiKey === undefined ? {} : { apiKey });
     this.#maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
   }
 

@@ -2,21 +2,33 @@
   "requestTimeoutMs": 120000,
   "attemptsPerModel": 2,
 
+  "providers": {
+    "premium": {
+      "kind": "anthropic",
+      "apiKeyEnv": "PREMIUM_MODEL_API_KEY"
+    },
+    "fast": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "apiKeyEnv": "FAST_MODEL_API_KEY"
+    }
+  },
+
   "models": {
-    "anthropic/opus": {
-      "provider": "anthropic",
+    "premium/reasoning": {
+      "provider": "premium",
       "model": "claude-opus-4-8",
       "tier": "premium",
       "price": { "inputPerMTok": 5, "outputPerMTok": 25, "cachedInputPerMTok": 0.5 }
     },
-    "anthropic/haiku": {
-      "provider": "anthropic",
+    "premium/small": {
+      "provider": "premium",
       "model": "claude-haiku-4-5",
       "tier": "cheap",
       "price": { "inputPerMTok": 1, "outputPerMTok": 5, "cachedInputPerMTok": 0.1 }
     },
-    "groq/llama-70b": {
-      "provider": "groq",
+    "fast/small": {
+      "provider": "fast",
       "model": "llama-3.3-70b-versatile",
       "tier": "cheap",
       "price": { "inputPerMTok": 0.59, "outputPerMTok": 0.79, "cachedInputPerMTok": 0.59 }
@@ -24,9 +36,9 @@
   },
 
   "routes": {
-    "routing": ["groq/llama-70b", "anthropic/haiku"],
-    "simple": ["groq/llama-70b", "anthropic/haiku"],
-    "reasoning": ["anthropic/opus", "anthropic/haiku"],
-    "sensitive": ["anthropic/opus"]
+    "routing": ["fast/small", "premium/small"],
+    "simple": ["fast/small", "premium/small"],
+    "reasoning": ["premium/reasoning", "premium/small"],
+    "sensitive": ["premium/reasoning"]
   }
 }

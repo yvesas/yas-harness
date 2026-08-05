@@ -33,7 +33,7 @@ and they live in the modules that products register.
 | Module registry | A module declares what it does and which tools it exposes |
 | Connection layer | OAuth with token refresh, encrypted credentials, per-tenant isolation |
 | Human approval | Any tool the agent runs can require an explicit OK first |
-| Model gateway | Cheap / premium / bring-your-own-model, routed by task kind, with fallback |
+| Model gateway | Any provider, routed by task kind — cheap for triage, strong for reasoning — with fallback and bring-your-own-key |
 | Memory | Conversation context that survives restarts |
 | Pools & permissions | Each module owns its data; cross-module access is asked for, never taken |
 | Observability | A trace of every step and the cost of every model call |
@@ -63,7 +63,8 @@ to see the whole thing work. It runs a turn end to end: config, persona, model,
 session, tools, the approval pause, the trace and the cost.
 
 ```bash
-export ANTHROPIC_API_KEY=...   # or GROQ_API_KEY, matching config/models.json
+export PREMIUM_MODEL_API_KEY=...   # whatever config/models.json names them
+export FAST_MODEL_API_KEY=...
 npm run chat
 ```
 

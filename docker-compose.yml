@@ -73,12 +73,16 @@ services:
       # says which of the two things it needs is missing.
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
       CONSOLE_OPERATOR: ${CONSOLE_OPERATOR:-}
-      # Only the playground needs these. Everything else on the console works
-      # without them, because a provider is built on first use — so an empty
-      # value here is a playground that says what is missing, not a console
-      # that will not start.
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Only the playground and the evals need these. Everything else on the
+      # console works without them, because a provider is built on first use —
+      # so an empty value here is a playground that says what is missing, not a
+      # console that will not start.
+      #
+      # The names come from `config/models.json`, which is where a deployment
+      # decides what its providers are called. These two are the shipped
+      # defaults; a fork that renames them renames these lines too.
+      PREMIUM_MODEL_API_KEY: ${PREMIUM_MODEL_API_KEY:-}
+      FAST_MODEL_API_KEY: ${FAST_MODEL_API_KEY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     volumes:
       # The Config page edits these files, and the point of editing a file is

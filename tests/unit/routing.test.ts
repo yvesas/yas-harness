@@ -18,6 +18,14 @@ const price = { inputPerMTok: 1, outputPerMTok: 2, cachedInputPerMTok: 0.1 };
 
 function config(overrides: Record<string, unknown> = {}) {
   return {
+    providers: {
+      groq: {
+        kind: 'openai-compatible',
+        baseUrl: 'https://api.example.test/v1',
+        apiKeyEnv: 'FAST_KEY',
+      },
+      anthropic: { kind: 'anthropic', apiKeyEnv: 'PREMIUM_KEY' },
+    },
     models: {
       cheap: { provider: 'groq', model: 'llama', tier: 'cheap', price },
       good: { provider: 'anthropic', model: 'opus', tier: 'premium', price },
@@ -110,5 +118,63 @@ describe('model configuration', () => {
       expect(candidatesFor(shipped, 'routing').length).toBeGreaterThan(1);
       expect(candidatesFor(shipped, 'reasoning').length).toBeGreaterThan(1);
     });
+  });
+
+  it('refuses a model naming a provider nobody declared', () => {
+    // Otherwise the mistake surfaces the first time that model is routed to —
+    // which, for a fallback, can be weeks later and in production.
+    expect(() =>
+      parseModelConfig(
+        config({ models: { ghost: { provider: 'nowhere', model: 'x', tier: 'cheap', price } } }),
+        'test',
+      ),
+    ).toThrow(/undeclared provider "nowhere"/);
+  });
+
+  it('refuses an openai-compatible provider with nowhere to send the request', () => {
+    expect(() =>
+      parseModelConfig(
+        {
+          providers: { fast: { kind: 'openai-compatible', apiKeyEnv: 'K' } },
+          models: { small: { provider: 'fast', model: 'a-model', tier: 'cheap', price } },
+          routes: {
+            routing: ['small'],
+            simple: ['small'],
+            reasoning: ['small'],
+            sensitive: ['small'],
+          },
+        },
+        'test',
+      ),
+    ).toThrow(/needs a baseUrl/);
+  });
+
+  it('names no vendor of its own — a provider is whatever the config calls it', () => {
+    const parsed = parseModelConfig(
+      {
+        providers: {
+          'the-fast-one': {
+            kind: 'openai-compatible',
+            baseUrl: 'https://api.example.test/v1',
+            apiKeyEnv: 'WHATEVER_WE_CALL_IT',
+          },
+        },
+        routes: {
+          routing: ['small'],
+          simple: ['small'],
+          reasoning: ['small'],
+          sensitive: ['premium'],
+        },
+        models: {
+          small: { provider: 'the-fast-one', model: 'a-model', tier: 'cheap', price },
+          premium: { provider: 'the-fast-one', model: 'a-bigger-model', tier: 'premium', price },
+        },
+      },
+      'test',
+    );
+
+    // The harness knows `openai-compatible` as a wire format, and nothing about
+    // whose endpoint is behind it.
+    expect(parsed.providers['the-fast-one']?.baseUrl).toBe('https://api.example.test/v1');
   });
 });

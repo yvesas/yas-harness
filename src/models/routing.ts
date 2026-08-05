@@ -33,6 +33,36 @@ export const priceSchema = z.object({
 
 export type Price = z.infer<typeof priceSchema>;
 
+/**
+ * How to reach one provider.
+ *
+ * Declared in configuration rather than known by the harness. A chassis that
+ * hardcodes a list of vendors has chosen them for every product built on it,
+ * and the whole point of the `ModelProvider` port is that it has not.
+ */
+export const providerEntrySchema = z.object({
+  /**
+   * Which adapter speaks to it.
+   *
+   * `openai-compatible` covers most of the market — Groq, Together, Fireworks,
+   * Cerebras, Mistral, xAI, OpenRouter, OpenAI itself, a local vLLM or Ollama,
+   * and Gemini's compatible endpoint. `anthropic` is separate because the
+   * harness uses features its native API has and the compatible shape does not.
+   */
+  kind: z.enum(['openai-compatible', 'anthropic']),
+  /** Where the API lives. Required for `openai-compatible`; optional otherwise. */
+  baseUrl: z.string().url().optional(),
+  /**
+   * The environment variable holding the key.
+   *
+   * Named here so no vendor's convention is written into the harness, and so
+   * two deployments of the same provider can use different variables.
+   */
+  apiKeyEnv: z.string().min(1),
+});
+
+export type ProviderEntry = z.infer<typeof providerEntrySchema>;
+
 export const modelEntrySchema = z.object({
   /** Must match a registered provider's `name`. */
   provider: z.string().min(1),
@@ -47,7 +77,13 @@ export type ModelEntry = z.infer<typeof modelEntrySchema>;
 const TASK_KINDS = ['routing', 'simple', 'reasoning', 'sensitive'] as const;
 
 export const modelConfigSchema = z.object({
-  /** Keyed by an internal reference such as `anthropic/claude-opus-4-8`. */
+  /**
+   * Which providers this deployment can reach, keyed by the name its models
+   * refer to. Required: the harness builds providers from this and knows no
+   * vendor of its own.
+   */
+  providers: z.record(z.string().min(1), providerEntrySchema),
+  /** Keyed by an internal reference such as `premium/opus`. */
   models: z.record(z.string().min(1), modelEntrySchema),
   /**
    * Ordered preference per task: the first entry is tried first, the rest are
@@ -92,6 +128,24 @@ export function parseModelConfig(source: unknown, origin: string): ModelConfig {
   }
 
   const config = parsed.data;
+
+  // A model naming a provider nobody declared is a wiring mistake that would
+  // otherwise surface the first time that model is routed to — which, for a
+  // fallback, can be weeks later and in production.
+  for (const [reference, entry] of Object.entries(config.models)) {
+    const provider = config.providers[entry.provider];
+    if (!provider) {
+      throw new ModelConfigError(
+        `model "${reference}" names undeclared provider "${entry.provider}" in ${origin}: ` +
+          `add it under "providers" with its kind, base URL and key variable`,
+      );
+    }
+    if (provider.kind === 'openai-compatible' && provider.baseUrl === undefined) {
+      throw new ModelConfigError(
+        `provider "${entry.provider}" is openai-compatible and needs a baseUrl in ${origin}`,
+      );
+    }
+  }
 
   for (const task of TASK_KINDS) {
     for (const reference of config.routes[task]) {

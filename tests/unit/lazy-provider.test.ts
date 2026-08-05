@@ -24,6 +24,14 @@ import { parseModelConfig } from '../../src/models/routing.js';
 
 const config = parseModelConfig(
   {
+    providers: {
+      groq: {
+        kind: 'openai-compatible',
+        baseUrl: 'https://api.example.test/v1',
+        apiKeyEnv: 'FAST_KEY',
+      },
+      anthropic: { kind: 'anthropic', apiKeyEnv: 'PREMIUM_KEY' },
+    },
     models: {
       good: {
         provider: 'anthropic',

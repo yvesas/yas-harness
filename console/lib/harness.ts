@@ -34,8 +34,15 @@ export function harness(): Promise<Harness> {
   // server runs from its own directory, so the default would look for the
   // harness's config inside the console's folder — which is how this failed the
   // first time it ran in a container.
+  const { modules, tools } = buildModules(poolStore);
   holder[CACHE] ??= createHarness({
-    modules: buildModules(poolStore),
+    modules,
+    // The agent is handed the same tool objects the modules declare. The
+    // harness keeps the two registries apart on purpose — a product may want
+    // the agent to run less than a module advertises — and this product wants
+    // them identical, so the page cannot show one thing and the agent run
+    // another.
+    tools,
     ...(process.env['CONFIG_DIR'] === undefined ? {} : { configDir: process.env['CONFIG_DIR'] }),
   });
   return holder[CACHE];

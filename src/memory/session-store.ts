@@ -39,7 +39,34 @@ export interface SessionStore {
   /** Conversation history, oldest first. */
   messages(tenantId: string, sessionId: string): Promise<StoredMessage[]>;
   append(tenantId: string, sessionId: string, messages: readonly ModelMessage[]): Promise<void>;
+  /**
+   * A tenant's conversations, most recent first.
+   *
+   * `find` answers about a session whose id you already hold, which is only
+   * true of the one you just created. Anything that lets a person come back —
+   * a console, an inbox, a support view — starts from "which conversations are
+   * there", and there was no way to ask.
+   *
+   * Ordered by last activity rather than creation, because a conversation
+   * someone replied to this morning is more relevant than one opened last week
+   * and abandoned.
+   */
+  list(tenantId: string, options?: ListSessionsQuery): Promise<SessionSummary[]>;
 }
+
+export interface ListSessionsQuery {
+  readonly limit?: number;
+}
+
+/** One conversation, as a list of them shows it. */
+export interface SessionSummary extends Session {
+  readonly messages: number;
+  /** When something was last said. Equal to `createdAt` for an empty session. */
+  readonly lastActivityAt: Date;
+}
+
+/** How many conversations a listing returns unless told otherwise. */
+export const DEFAULT_SESSION_LIMIT = 30;
 
 export class SessionNotFoundError extends Error {
   constructor(tenantId: string, sessionId: string) {

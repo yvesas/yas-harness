@@ -13,7 +13,14 @@
 import type { ContentPart, ModelMessage } from '../models/model-gateway.js';
 import { redactDeep, type SecretRedactor } from '../redaction/secret-redactor.js';
 
-import type { CreateSessionInput, Session, SessionStore, StoredMessage } from './session-store.js';
+import type {
+  CreateSessionInput,
+  ListSessionsQuery,
+  Session,
+  SessionStore,
+  SessionSummary,
+  StoredMessage,
+} from './session-store.js';
 
 export class RedactingSessionStore implements SessionStore {
   readonly #inner: SessionStore;
@@ -30,6 +37,12 @@ export class RedactingSessionStore implements SessionStore {
 
   find(tenantId: string, sessionId: string): Promise<Session | null> {
     return this.#inner.find(tenantId, sessionId);
+  }
+
+  // Listing carries no message text — a count and two timestamps — so there is
+  // nothing here for the redactor to do.
+  list(tenantId: string, options?: ListSessionsQuery): Promise<SessionSummary[]> {
+    return this.#inner.list(tenantId, options);
   }
 
   messages(tenantId: string, sessionId: string): Promise<StoredMessage[]> {

@@ -13,7 +13,15 @@ import type { Pool } from 'pg';
 
 import type { ContentPart, ModelMessage } from '../models/model-gateway.js';
 
-import type { CreateSessionInput, Session, SessionStore, StoredMessage } from './session-store.js';
+import type {
+  CreateSessionInput,
+  ListSessionsQuery,
+  Session,
+  SessionStore,
+  SessionSummary,
+  StoredMessage,
+} from './session-store.js';
+import { DEFAULT_SESSION_LIMIT } from './session-store.js';
 
 interface SessionRow {
   id: string;
@@ -105,6 +113,32 @@ export class PostgresSessionStore implements SessionStore {
     } finally {
       client.release();
     }
+  }
+
+  async list(tenantId: string, options: ListSessionsQuery = {}): Promise<SessionSummary[]> {
+    const { rows } = await this.pool.query<SessionRow & { messages: string; last_at: Date }>(
+      // The count and the last timestamp come from one join rather than a query
+      // per session: a list of thirty conversations must not be thirty-one
+      // round trips.
+      `SELECT s.id, s.tenant_id, s.persona_id, s.created_at,
+              count(m.id)::text                      AS messages,
+              coalesce(max(m.created_at), s.created_at) AS last_at
+         FROM sessions s
+         LEFT JOIN messages m ON m.session_id = s.id AND m.tenant_id = s.tenant_id
+        WHERE s.tenant_id = $1
+        GROUP BY s.id
+        -- By last activity, not creation: a conversation replied to this
+        -- morning matters more than one opened last week and abandoned.
+        ORDER BY last_at DESC
+        LIMIT $2`,
+      [tenantId, options.limit ?? DEFAULT_SESSION_LIMIT],
+    );
+
+    return rows.map((row) => ({
+      ...toSession(row),
+      messages: Number(row.messages),
+      lastActivityAt: row.last_at,
+    }));
   }
 }
 

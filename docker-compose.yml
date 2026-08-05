@@ -73,6 +73,12 @@ services:
       # says which of the two things it needs is missing.
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
       CONSOLE_OPERATOR: ${CONSOLE_OPERATOR:-}
+      # Only the playground needs these. Everything else on the console works
+      # without them, because a provider is built on first use — so an empty
+      # value here is a playground that says what is missing, not a console
+      # that will not start.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     ports:
       # Bound to loopback on the host, deliberately. The console holds the

@@ -152,6 +152,22 @@ ADR instead.
   installs into a throwaway project and imports **by package name**: every test
   here imports `src/` by relative path, so a broken exports map or a missing
   file passes the whole suite and fails on the first consumer.
+- **Conversations are listable, and a turn routes and runs under one trace
+  (console phase 3).** `SessionStore.list` is the fourth port a console page has
+  asked for. `find` answers about a session whose id you already hold, which is
+  only true of the one you just created — anything that lets a person come back
+  starts from "which conversations are there". Ordered by **last activity**, not
+  creation: one replied to this morning matters more than one opened last week
+  and abandoned, and an empty conversation reports its creation rather than a
+  null that would sort at an arbitrary end. The Postgres adapter gets the count
+  and the timestamp from one join, because a list of thirty must not be
+  thirty-one round trips. The playground takes a turn as `route` then `run`
+  **sharing the trace id** the decision returns, so the panel beside the chat
+  shows *why* a module was chosen and not only what happened after. The product
+  also fills the module registries and the agent's `ToolRegistry` with the same
+  tool objects — the harness keeps them apart because a product may want the
+  agent to run less than a module advertises, and this one wants them identical
+  so a page cannot show one thing while the agent runs another.
 - **A model provider is built on first use, not when the harness is (found by
   `docker compose up`).** Providers read their key in their constructor and were
   built while the harness was, so a key was required to do things that never

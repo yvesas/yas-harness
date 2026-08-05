@@ -111,3 +111,23 @@ pre {
   font-size: 1.5rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* The playground: chat and trace side by side, stacking when there is no room
+   for two columns. Reading them apart means holding one in your head while you
+   look at the other. */
+.split {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 60rem) {
+  .split {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.turn {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--edge);
+}

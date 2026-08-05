@@ -30,7 +30,12 @@ what one returns is a breaking change and waits for 2.0.0.
 - **Model gateway** — routing by task kind (`routing`, `simple`, `reasoning`,
   `sensitive`) across providers, with retries on transient failures, fallback
   between providers, per-call deadlines, and a cost row for every attempt.
-  Anthropic and Groq adapters. A `sensitive` route may never reach a cheap model.
+  A `sensitive` route may never reach a cheap model. **A provider is
+  configuration**: `config/models.json` declares which exist, where they are and
+  which environment variable holds each key, so adding one is an entry in a file
+  rather than a change to the harness. One adapter covers any OpenAI-compatible
+  endpoint — most vendors, and a local runtime — and a second speaks Anthropic's
+  native API, which the context compressor needs for explicit cache breakpoints.
 - **Gateway resilience** — the gateway remembers what is broken, at the
   granularity of whose fault it is: a provider outage is everyone's and is held
   globally, a rate limit belongs to one key and is held per tenant. Recovery is
@@ -106,6 +111,10 @@ Written down rather than discovered later:
 - **`private: true` stays in `package.json`.** The package is not on npm; install
   by tag (`npm install github:yvesas/yas-harness#v1.0.0`). Publishing is a
   separate decision, not a side effect of tagging.
+- **A turn has never been watched end to end through the console.** The agent
+  loop is covered by tests and the playground renders, but no live model key has
+  been used here — so routing, a model call, a tool and the trace have been seen
+  working separately and not together in one screen.
 
 [Unreleased]: https://github.com/yvesas/yas-harness/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/yvesas/yas-harness/releases/tag/v1.0.0

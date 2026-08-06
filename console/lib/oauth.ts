@@ -44,6 +44,15 @@ export interface PendingFlow {
   readonly connectorId: string;
   /** Echoed back to the token endpoint, which requires it to match exactly. */
   readonly redirectUri: string;
+  /**
+   * What to call this connection, if the person said.
+   *
+   * It travels in the cookie because it has to survive the round trip through
+   * the provider, and there is nowhere else for it to wait: the connection does
+   * not exist yet, and the query string comes back from the provider carrying
+   * only what the provider was given.
+   */
+  readonly accountLabel?: string;
 }
 
 export class OAuthFlowError extends Error {
@@ -59,11 +68,16 @@ export function redirectUri(origin: string): string {
 }
 
 /** Start a flow: mint the state, remember it, and hand it back for the URL. */
-export async function beginFlow(connectorId: string, origin: string): Promise<PendingFlow> {
+export async function beginFlow(
+  connectorId: string,
+  origin: string,
+  accountLabel?: string,
+): Promise<PendingFlow> {
   const flow: PendingFlow = {
     state: randomBytes(32).toString('base64url'),
     connectorId,
     redirectUri: redirectUri(origin),
+    ...(accountLabel ? { accountLabel } : {}),
   };
 
   (await cookies()).set(STATE_COOKIE, JSON.stringify(flow), {

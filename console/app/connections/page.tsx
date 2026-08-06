@@ -17,8 +17,13 @@ import { connect, disconnect } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Connections() {
+export default async function Connections({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   try {
+    const outcome = single(await searchParams);
     const tenant = await currentTenant();
     const api = await harness();
 
@@ -48,6 +53,29 @@ export default async function Connections() {
     return (
       <>
         <h1>Connections</h1>
+
+        {outcome.connected ? (
+          <p>
+            <strong>Connected {outcome.connected}.</strong> Its credential is sealed under this
+            tenant&rsquo;s key and was never written down in the clear.{' '}
+            {outcome.scopes ? (
+              <span className="muted">
+                Granted: <code>{outcome.scopes}</code>. A provider may grant less than was asked
+                for, so this is what the token actually carries.
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        {outcome.error ? (
+          <>
+            <p className="failed">Could not finish connecting: {outcome.error}</p>
+            <p className="muted">
+              Nothing was stored. If a connection row was created before this failed it was removed
+              — one that looks connected and cannot authenticate fails later, at a call, and reads
+              as the source being down.
+            </p>
+          </>
+        ) : null}
 
         <h2>Connected</h2>
         {connected.length === 0 ? (
@@ -131,4 +159,17 @@ export default async function Connections() {
   } catch (error) {
     return <Failure error={error} />;
   }
+}
+
+/** A query string can repeat a key; the first value is the one that was meant. */
+function single(params: Record<string, string | string[] | undefined>): Record<string, string> {
+  const picked: Record<string, string> = {};
+  for (const key of ['connected', 'scopes', 'error']) {
+    const value = params[key];
+    const first = Array.isArray(value) ? value[0] : value;
+    if (first !== undefined) {
+      picked[key] = first;
+    }
+  }
+  return picked;
 }

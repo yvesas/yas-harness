@@ -514,7 +514,11 @@ export type {
 } from './mcp/protocol.js';
 export { OAuthClient, OAuthError, isOAuthToken, isTokenExpired } from './connections/oauth.js';
 export type { OAuthProvider, OAuthToken } from './connections/oauth.js';
-export { ConnectionOnboarding, UnknownProviderError } from './connections/connection-onboarding.js';
+export {
+  ConnectionOnboarding,
+  grantedScopes,
+  UnknownProviderError,
+} from './connections/connection-onboarding.js';
 export type { AuthorizationRequest, CompleteRequest } from './connections/connection-onboarding.js';
 export {
   OAuthConfigError,

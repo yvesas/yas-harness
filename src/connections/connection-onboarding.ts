@@ -108,7 +108,7 @@ export class ConnectionOnboarding {
 
     // The scopes the provider actually granted, which are not always the ones
     // asked for — a person can decline part of a consent screen.
-    const granted = token.scope?.split(' ').filter(Boolean);
+    const granted = grantedScopes(token.scope);
 
     const connection = await this.#connections.create({
       tenantId: request.tenantId,
@@ -140,4 +140,24 @@ export class ConnectionOnboarding {
     }
     return provider;
   }
+}
+
+/**
+ * The scopes a provider says it granted, however it chose to delimit them.
+ *
+ * RFC 6749 §3.3 says space-separated, and GitHub answers with commas. Splitting
+ * on the specification alone produced a single scope named
+ * `"public_repo,read:user"` — one string that looks right on a page and is
+ * wrong in every comparison, which is the worst way for data to be wrong.
+ *
+ * So both, since neither is a legal character *inside* a scope: RFC 6749 draws
+ * scope tokens from a character set that excludes the space and the comma
+ * alike. Splitting on either can therefore only ever separate scopes, never cut
+ * one in half.
+ */
+export function grantedScopes(scope: string | null | undefined): string[] {
+  return (scope ?? '')
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }

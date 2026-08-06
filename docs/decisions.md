@@ -159,6 +159,29 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **Scopes are split on space *or* comma, because the specification and GitHub
+  disagree.** RFC 6749 §3.3 says a granted `scope` is space-separated; GitHub
+  answers with commas. Splitting on the specification alone stored a single
+  scope named `"public_repo,read:user"` — one string that renders correctly on a
+  page and is wrong in every comparison, which is the worst way for data to be
+  wrong. Splitting on either is safe rather than lax: the RFC draws scope tokens
+  from a character set excluding both, so neither can appear *inside* a scope
+  and neither split can cut one in half. Found by connecting a real account —
+  no mock had disagreed with the specification, because the mocks were written
+  from it.
+- **The OAuth callback is a Route Handler, and the real flow is what said so.**
+  It was a page, on the reasoning that a provider sends a *person* to the
+  callback rather than a machine. That is true of the rendering and beside the
+  point for the state cookie: finishing a flow **clears** it, clearing is a
+  mutation, and Next permits mutations in a Route Handler or a Server Action and
+  nowhere else. Every test passed, the page rendered, and the first real
+  authorization failed on it — with the code and state sitting in the URL,
+  having worked. The handler now does the exchange and redirects back to
+  Connections carrying the outcome in the query string: there is nothing secret
+  in a connector id, the scopes granted, or why it failed, and a URL somebody
+  can re-read, screenshot or paste into a bug report is worth more than a
+  message that vanishes on refresh. It also lands them on the list that now
+  includes what they just connected.
 - **A provider is configuration, not a file in `src/models/`.** The ports were
   always vendor-neutral, but the composition root was not: it read
   `if (routed.has('anthropic'))`, so adding a provider meant editing the

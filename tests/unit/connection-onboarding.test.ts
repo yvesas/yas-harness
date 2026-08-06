@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ConnectionOnboarding,
+  grantedScopes,
   UnknownProviderError,
 } from '../../src/connections/connection-onboarding.js';
 import { InMemoryConnectionStore } from '../../src/connections/in-memory-connection-store.js';
@@ -144,6 +145,22 @@ describe('finishing a flow', () => {
     });
   });
 
+  it('splits the scopes GitHub returns, which are comma-separated', async () => {
+    // RFC 6749 says space-separated and GitHub answers with commas. Splitting
+    // on the specification alone stored one scope named
+    // "public_repo,read:user" — a string that looks right on a page and is
+    // wrong in every comparison. Found by connecting a real account.
+    const { onboarding } = build({ answer: () => token({ scope: 'public_repo,read:user' }) });
+
+    const connection = await onboarding.complete('drive', {
+      tenantId: TENANT,
+      code: 'auth-code',
+      redirectUri: REDIRECT,
+    });
+
+    expect(connection.scopes).toEqual(['public_repo', 'read:user']);
+  });
+
   it('records the scopes granted, not the ones asked for', async () => {
     const { onboarding } = build();
 
@@ -210,5 +227,27 @@ describe('finishing a flow', () => {
     // A connection that looks connected and cannot authenticate fails later, at
     // a call, and reads as the source being down.
     expect(await connections.list(TENANT)).toHaveLength(0);
+  });
+});
+
+describe('however a provider delimits its scopes', () => {
+  it('splits on spaces, as the specification says', () => {
+    expect(grantedScopes('files.read files.write')).toEqual(['files.read', 'files.write']);
+  });
+
+  it('splits on commas, as GitHub actually answers', () => {
+    expect(grantedScopes('public_repo,read:user')).toEqual(['public_repo', 'read:user']);
+  });
+
+  it('survives a provider that uses both, or is untidy about it', () => {
+    // Neither character is legal *inside* a scope — RFC 6749 draws scope tokens
+    // from a set excluding both — so splitting on either can only separate
+    // scopes, never cut one in half.
+    expect(grantedScopes(' a, b ,  c ')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('says nothing was granted when nothing was reported', () => {
+    expect(grantedScopes(null)).toEqual([]);
+    expect(grantedScopes('')).toEqual([]);
   });
 });

@@ -63,6 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       tenantId: tenant.id,
       code,
       redirectUri: flow.redirectUri,
+      ...(flow.accountLabel ? { accountLabel: flow.accountLabel } : {}),
     });
 
     return back(request, {

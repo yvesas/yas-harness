@@ -98,6 +98,12 @@ How `state` is kept, since it is the security-relevant part:
   This was a page first — the provider sends a person here, so a page seemed
   right — and the real flow failed on it at the first attempt.
 
+A source stays in the list after you connect it, and that is deliberate:
+connecting it again adds **another account** rather than replacing the first —
+two GitHub logins, two Drives. The page says so, because without saying so it
+reads as having forgotten. Name a connection when you create it and the list
+tells them apart; the count beside a source says how many you already have.
+
 Disconnecting erases the sealed credential and the connection. It does **not**
 revoke the token at the provider — only the source can do that, and claiming
 otherwise would leave a live token behind a console saying it is gone.

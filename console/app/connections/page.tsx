@@ -63,7 +63,8 @@ export default async function Connections({
                 Granted: <code>{outcome.scopes}</code>. A provider may grant less than was asked
                 for, so this is what the token actually carries.
               </span>
-            ) : null}
+            ) : null}{' '}
+            <a href="/connections">Dismiss</a>
           </p>
         ) : null}
         {outcome.error ? (
@@ -121,32 +122,51 @@ export default async function Connections({
           the console cannot keep.
         </p>
 
-        <h2>Available</h2>
+        <h2>Connect a source</h2>
+        <p className="muted">
+          A source stays here after you connect it, because connecting it again adds{' '}
+          <strong>another account</strong> rather than replacing the first — two GitHub logins, two
+          Drives. Name them and the list above tells them apart.
+        </p>
         <table>
           <thead>
             <tr>
               <th>Source</th>
               <th>Will ask for</th>
+              <th>Name (optional)</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {connectable.map((connectorId) => (
-              <tr key={connectorId}>
-                <td>
-                  <code>{connectorId}</code>
-                </td>
-                <td className="muted">
-                  <code>{api.onboarding?.scopesFor(connectorId).join(' ')}</code>
-                </td>
-                <td>
-                  <form action={connect}>
-                    <input type="hidden" name="connectorId" value={connectorId} />
-                    <button type="submit">Connect</button>
-                  </form>
-                </td>
-              </tr>
-            ))}
+            {connectable.map((connectorId) => {
+              const already = connected.filter(
+                (connection) => connection.connectorId === connectorId,
+              ).length;
+              return (
+                <tr key={connectorId}>
+                  <td>
+                    <code>{connectorId}</code>
+                    {already > 0 ? <div className="muted">{already} connected</div> : null}
+                  </td>
+                  <td className="muted">
+                    <code>{api.onboarding?.scopesFor(connectorId).join(' ')}</code>
+                  </td>
+                  <td colSpan={2}>
+                    <form action={connect}>
+                      <input type="hidden" name="connectorId" value={connectorId} />
+                      <input
+                        type="text"
+                        name="accountLabel"
+                        size={24}
+                        maxLength={60}
+                        placeholder="work account"
+                      />{' '}
+                      <button type="submit">Connect</button>
+                    </form>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         <p className="muted">

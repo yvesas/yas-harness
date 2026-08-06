@@ -27,7 +27,12 @@ export async function connect(form: FormData): Promise<never> {
     throw new Error('no OAuth provider is configured');
   }
 
-  const flow = await beginFlow(connectorId, await origin());
+  // Trimmed and capped: it is a label somebody types, and it ends up in a
+  // cookie that has to stay under the header size every browser enforces.
+  const label = String(form.get('accountLabel') ?? '')
+    .trim()
+    .slice(0, 60);
+  const flow = await beginFlow(connectorId, await origin(), label === '' ? undefined : label);
   // `redirect` throws to unwind, so nothing after it runs — which is why the
   // state cookie is set first.
   redirect(

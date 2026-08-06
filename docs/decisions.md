@@ -159,6 +159,16 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **A server action that changes what a page shows has to say so.**
+  Disconnecting removed the connection and the page kept rendering the list it
+  had, so somebody who had just disconnected needed a refresh to believe it. The
+  page is `force-dynamic`, which was the reason it looked covered — but that
+  decides whether a page is *cached*, not whether an action's result reaches the
+  client. Three of the four actions already called `revalidatePath`; this one
+  was the omission. It also redirects to a clean URL, since the outcome banner
+  lives in the query string and landing back on `?connected=github` after
+  disconnecting it would leave a success message announcing what was just
+  undone.
 - **Scopes are split on space *or* comma, because the specification and GitHub
   disagree.** RFC 6749 §3.3 says a granted `scope` is space-separated; GitHub
   answers with commas. Splitting on the specification alone stored a single

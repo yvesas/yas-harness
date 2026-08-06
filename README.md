@@ -104,6 +104,7 @@ const tenant = await harness.tenants.ensure({ slug: 'acme', name: 'Acme' });
 | `npm run isolation` | Prove the schema isolates tenants — every table, every key |
 | `npm run migrate up\|down\|status` | Apply, roll back or inspect migrations |
 | `npm run console` | The operator console, on `http://127.0.0.1:4100` |
+| `./start.sh` | Check the machine and start everything in Docker |
 
 ## The console
 
@@ -131,6 +132,7 @@ Each folder under `src/` documents its own responsibility and boundary. For the
 full picture — the layers, the ports and their adapters, the path a message
 takes, and the decisions behind them — see [`docs/`](./docs/):
 
+- [Using the harness](./docs/using-it.md) — for running it rather than changing it
 - [Architecture overview](./docs/architecture.md)
 - [Architecture Decision Records](./docs/adr/)
 - [Design decisions](./docs/decisions.md)

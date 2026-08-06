@@ -64,6 +64,19 @@ services:
       dockerfile: console/Dockerfile
     container_name: yas-console
     restart: unless-stopped
+    # The whole file, not a hand-picked list. `config/connectors.json` names the
+    # variable holding each client secret — `clientSecretEnv` — and that name is
+    # the deployment's to choose, so this file cannot know it in advance.
+    # Enumerating them here would mean editing compose every time somebody
+    # connects a new source, and forgetting to is a console that says a secret
+    # "is not set" while it sits in .env.
+    #
+    # The explicit entries below still win: compose gives `environment`
+    # precedence over `env_file`, which is what keeps DATABASE_URL pointing at
+    # the compose network instead of at the host's published port.
+    env_file:
+      - path: .env
+        required: false
     environment:
       # `postgres:5432` is the service on the compose network. The host's 4000
       # is a published port and does not exist in here.

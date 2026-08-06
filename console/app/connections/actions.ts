@@ -12,6 +12,7 @@
  * against cross-site invocation on its own.
  */
 
+import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -50,7 +51,7 @@ export async function connect(form: FormData): Promise<never> {
  * pretending otherwise would leave a live token behind a console that says it
  * is gone. What this does guarantee is that *we* can no longer use it.
  */
-export async function disconnect(form: FormData): Promise<void> {
+export async function disconnect(form: FormData): Promise<never> {
   const connectionId = String(form.get('connectionId') ?? '');
   const tenant = await currentTenant();
   const api = await harness();
@@ -59,6 +60,14 @@ export async function disconnect(form: FormData): Promise<void> {
   // would leave an unreachable row holding a live token.
   await api.vault?.forget(tenant.id, connectionId);
   await api.connections.remove(tenant.id, connectionId);
+
+  // Without this the page keeps rendering the list it had, and somebody who
+  // just disconnected has to refresh to believe it. `force-dynamic` decides
+  // whether a page is cached, not whether an action's result reaches it.
+  revalidatePath('/connections');
+  // And back to a clean URL. Landing on `?connected=github` after disconnecting
+  // it would leave the success banner announcing what was just undone.
+  redirect('/connections');
 }
 
 /**

@@ -159,6 +159,19 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **The OAuth callback is a Route Handler, and the real flow is what said so.**
+  It was a page, on the reasoning that a provider sends a *person* to the
+  callback rather than a machine. That is true of the rendering and beside the
+  point for the state cookie: finishing a flow **clears** it, clearing is a
+  mutation, and Next permits mutations in a Route Handler or a Server Action and
+  nowhere else. Every test passed, the page rendered, and the first real
+  authorization failed on it — with the code and state sitting in the URL,
+  having worked. The handler now does the exchange and redirects back to
+  Connections carrying the outcome in the query string: there is nothing secret
+  in a connector id, the scopes granted, or why it failed, and a URL somebody
+  can re-read, screenshot or paste into a bug report is worth more than a
+  message that vanishes on refresh. It also lands them on the list that now
+  includes what they just connected.
 - **A provider is configuration, not a file in `src/models/`.** The ports were
   always vendor-neutral, but the composition root was not: it read
   `if (routed.has('anthropic'))`, so adding a provider meant editing the

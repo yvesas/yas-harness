@@ -93,6 +93,10 @@ How `state` is kept, since it is the security-relevant part:
 - Cleared whatever the outcome. A state that outlives its flow can be replayed.
 - **Checked before the code is spent.** Trading first and validating afterwards
   would already have attached the account by the time the check fails.
+- **Cleared in a Route Handler**, not a page. Clearing a cookie is a mutation,
+  and Next allows those in a Route Handler or a Server Action and nowhere else.
+  This was a page first — the provider sends a person here, so a page seemed
+  right — and the real flow failed on it at the first attempt.
 
 Disconnecting erases the sealed credential and the connection. It does **not**
 revoke the token at the provider — only the source can do that, and claiming

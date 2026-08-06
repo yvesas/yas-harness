@@ -1,9 +1,12 @@
 # Documentation
 
-How the harness is built, and why.
+How the harness is built, and why — plus one document about simply using it.
 
 ## Start here
 
+- **[Using the harness](./using-it.md)** — for running it rather than changing
+  it: starting, what the console's pages answer, connecting a source, and what
+  it does with your data.
 - **[Architecture](./architecture.md)** — the shape of the system: the golden
   rule, the layers, the ports and their adapters, and the path a message takes.
 

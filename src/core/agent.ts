@@ -29,14 +29,29 @@ import { SessionNotFoundError } from '../memory/session-store.js';
 import type { TraceRecorder } from '../telemetry/trace.js';
 import { TurnTrace } from '../telemetry/trace.js';
 
+import type { ModuleRegistry } from '../modules/module.js';
 import type { Persona } from './persona.js';
 import type { ToolRegistry } from './tool.js';
 
 export interface AgentDependencies {
   readonly gateway: ModelGateway;
   readonly sessions: SessionStore;
+  /**
+   * The tools a turn runs with when no module was chosen.
+   *
+   * A routed turn uses **its module's** tools instead. This is the fallback for
+   * a product with no modules, or a caller that skipped the router.
+   */
   readonly tools: ToolRegistry;
   readonly persona: Persona;
+  /**
+   * The modules a routed turn can be delegated to.
+   *
+   * Without it, `moduleId` on a turn is ignored and every turn runs on the
+   * dependencies above — which is exactly how the agent behaved before
+   * delegation existed.
+   */
+  readonly modules?: ModuleRegistry;
   /**
    * Where gated tool calls wait for a human. Without it, an approval-gated
    * tool fails closed — the agent refuses to run it — which keeps a product
@@ -54,6 +69,18 @@ export interface AgentTurn {
   readonly tenantId: string;
   readonly sessionId: string;
   readonly input: string;
+  /**
+   * The module the router chose.
+   *
+   * The turn then runs **as that module**: its tools, its instructions, its
+   * task kind. That is what "the central delegates, it does not micromanage"
+   * means in code — before this, the router's decision was recorded in the
+   * trace and then discarded, and every turn ran with every module's tools
+   * flattened together.
+   *
+   * Omit it and the turn runs on the agent's own dependencies, unchanged.
+   */
+  readonly moduleId?: string;
   /**
    * Joins this turn to a trace the caller already started — a routing decision,
    * typically. Omit and the agent begins one.
@@ -102,6 +129,23 @@ interface Context {
   readonly tenantId: string;
   readonly sessionId: string;
   readonly trace: TurnTrace;
+  /** What this turn runs as: the module's, or the agent's own. */
+  readonly scope: Scope;
+}
+
+/**
+ * The tools, instructions and limits one turn runs with.
+ *
+ * Resolved once per turn rather than read from fields, because a routed turn
+ * and an unrouted one are the same loop with different answers to the same
+ * three questions.
+ */
+interface Scope {
+  readonly moduleId: string | null;
+  readonly tools: ToolRegistry;
+  readonly instructions: string;
+  readonly task: 'simple' | 'reasoning' | 'sensitive';
+  readonly maxToolIterations: number;
 }
 
 /** The two ways a tool-call turn resolves before the loop can continue. */
@@ -116,6 +160,7 @@ export class Agent {
   readonly #persona: Persona;
   readonly #approvals: ApprovalStore | undefined;
   readonly #traces: TraceRecorder | undefined;
+  readonly #modules: ModuleRegistry | undefined;
 
   constructor(dependencies: AgentDependencies) {
     this.#gateway = dependencies.gateway;
@@ -124,9 +169,15 @@ export class Agent {
     this.#persona = dependencies.persona;
     this.#approvals = dependencies.approvals;
     this.#traces = dependencies.traces;
+    this.#modules = dependencies.modules;
   }
 
-  #context(input: { tenantId: string; sessionId: string; traceId?: string }): Context {
+  #context(input: {
+    tenantId: string;
+    sessionId: string;
+    traceId?: string;
+    moduleId?: string;
+  }): Context {
     return {
       tenantId: input.tenantId,
       sessionId: input.sessionId,
@@ -135,6 +186,46 @@ export class Agent {
         sessionId: input.sessionId,
         ...(input.traceId === undefined ? {} : { traceId: input.traceId }),
       }),
+      scope: this.#scope(input.moduleId),
+    };
+  }
+
+  /**
+   * What this turn runs as.
+   *
+   * A named module the registry knows becomes the scope. A named module it does
+   * **not** know is a mistake worth failing on rather than absorbing: silently
+   * running with every tool would give a plausible answer produced by the wrong
+   * thing, which is the failure nobody notices.
+   */
+  #scope(moduleId: string | undefined): Scope {
+    const fallback: Scope = {
+      moduleId: null,
+      tools: this.#tools,
+      instructions: this.#persona.instructions,
+      task: this.#persona.task,
+      maxToolIterations: this.#persona.maxToolIterations,
+    };
+
+    if (moduleId === undefined || !this.#modules) {
+      return fallback;
+    }
+
+    const module = this.#modules.get(moduleId);
+    if (!module) {
+      throw new AgentError(`turn was routed to module "${moduleId}", which is not registered`);
+    }
+
+    return {
+      moduleId,
+      tools: module.tools,
+      // Appended, not substituted: the product's voice, safety rules and
+      // language have to survive whichever module answers.
+      instructions: module.agent?.instructions
+        ? `${this.#persona.instructions}\n\n${module.agent.instructions}`
+        : this.#persona.instructions,
+      task: module.agent?.task ?? this.#persona.task,
+      maxToolIterations: module.agent?.maxToolIterations ?? this.#persona.maxToolIterations,
     };
   }
 
@@ -156,7 +247,14 @@ export class Agent {
     await ctx.trace.step({
       kind: 'input',
       succeeded: true,
-      detail: { characters: turn.input.length },
+      // The module is on the step because a trace read months later should say
+      // which one answered without the reader having to find the `route` step
+      // and trust that nothing changed between them.
+      ...(ctx.scope.moduleId === null ? {} : { label: ctx.scope.moduleId }),
+      detail: {
+        characters: turn.input.length,
+        ...(ctx.scope.moduleId === null ? {} : { module: ctx.scope.moduleId }),
+      },
     });
 
     const userTurn: ModelMessage = { role: 'user', content: [{ type: 'text', text: turn.input }] };
@@ -208,14 +306,19 @@ export class Agent {
     usage: UsageTotal,
     invocations: ToolInvocation[],
   ): Promise<AgentReply> {
-    const toolSchemas = this.#tools.size > 0 ? this.#tools.schemas() : undefined;
+    // Everything the model is told about this turn comes from the scope: the
+    // module's tools and instructions when one was chosen, the agent's own when
+    // not. Reading the fields directly here is what made a routed turn
+    // indistinguishable from an unrouted one.
+    const { tools, task, instructions, maxToolIterations } = ctx.scope;
+    const toolSchemas = tools.size > 0 ? tools.schemas() : undefined;
 
-    for (let iteration = 0; iteration < this.#persona.maxToolIterations; iteration += 1) {
+    for (let iteration = 0; iteration < maxToolIterations; iteration += 1) {
       let response;
       try {
         response = await this.#gateway.complete({
-          task: this.#persona.task,
-          system: this.#persona.instructions,
+          task,
+          system: instructions,
           attribution: { tenantId: ctx.tenantId, sessionId: ctx.sessionId },
           // A snapshot, not the working array: the loop keeps appending to
           // `history`, and an adapter must see it as it was at call time.
@@ -327,7 +430,7 @@ export class Agent {
     calls: readonly ToolCallPart[],
     invocations: ToolInvocation[],
   ): Promise<Settlement> {
-    const gated = calls.filter((call) => this.#tools.requiresApproval(call.name));
+    const gated = calls.filter((call) => ctx.scope.tools.requiresApproval(call.name));
 
     if (gated.length > 0 && this.#approvals) {
       const existing = await this.#approvals.forToolCalls(
@@ -414,7 +517,7 @@ export class Agent {
     call: ToolCallPart,
     approval: Approval | undefined,
   ): Promise<{ content: string; isError: boolean }> {
-    if (this.#tools.requiresApproval(call.name)) {
+    if (ctx.scope.tools.requiresApproval(call.name)) {
       if (!this.#approvals) {
         // Fail closed: no approval queue wired, so a gated tool does not run.
         return {
@@ -437,7 +540,7 @@ export class Agent {
     }
 
     // Only the identity of the turn crosses into a tool, never its tracer.
-    return this.#tools.execute(call.name, call.input, {
+    return ctx.scope.tools.execute(call.name, call.input, {
       tenantId: ctx.tenantId,
       sessionId: ctx.sessionId,
     });

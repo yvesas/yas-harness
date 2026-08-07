@@ -168,6 +168,23 @@ ADR instead.
   `.env`. Found by testing that path before somebody walked it: the container
   kept a stale value across two `up -d` calls, same creation timestamp both
   times. A recreate costs seconds and the script exists so this never happens.
+- **The central agent delegates to the module the router chose.** Doc 13's
+  decision 3 says that under centralised orchestration one thing holds from the
+  start: *"o central delega, não microgerencia"*. It did not. `AgentTurn` had no
+  `moduleId`, the word "module" appeared nowhere in `agent.ts`, and the console
+  passed the decision's `traceId` while dropping its `moduleId` — so the router
+  chose correctly, the choice was traced, and the turn then ran with every
+  module's tools flattened together. A note-taking module could send an email
+  because some other module could. A turn now resolves a **scope** — tools,
+  instructions, task kind, iteration limit — once, from the module or from the
+  agent's own dependencies, and the loop reads that instead of the instance
+  fields. Three rules: **instructions are appended, never substituted**, because
+  a module that can replace the system prompt can quietly undo the product's
+  voice, language and safety rules; **everything is additive**, so a module with
+  no `agent` block, a turn with no `moduleId` and an agent with no registry all
+  behave exactly as before; and **an unknown module fails the turn** rather than
+  falling back to everything, because a plausible answer from the wrong thing is
+  the failure nobody notices.
 - **A failed turn is an answer, not a crash — and the console owns its error
   screen.** Sending a message with no model key configured let the error out of
   the server action, which replaced the whole page with Next's own "This page

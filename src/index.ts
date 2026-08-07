@@ -372,7 +372,9 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const traces = new RedactingTraceRecorder(exporter ?? traceStore, redactor);
 
   return {
-    agent: new Agent({ gateway, sessions, tools, persona, approvals, traces }),
+    // `modules` is what makes a routed turn run as its module rather than with
+    // every module's tools flattened together.
+    agent: new Agent({ gateway, sessions, tools, persona, approvals, traces, modules }),
     sessions,
     gateway,
     tools,

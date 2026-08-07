@@ -49,6 +49,7 @@ import { OpenAiCompatibleProvider } from './models/openai-compatible-provider.js
 import type { ModelGateway } from './models/model-gateway.js';
 import { RoutedGateway } from './models/routed-gateway.js';
 import { loadModelConfig } from './models/routing.js';
+import type { ModelConfig } from './models/routing.js';
 import { ModuleRegistry } from './modules/module.js';
 import { PostgresPoolStore } from './pools/postgres-pool-store.js';
 import { RedactingPoolStore } from './pools/redacting-pool-store.js';
@@ -148,6 +149,18 @@ export interface Harness {
    * its own probes; **liveness takes none of them**, on purpose.
    */
   readonly probes: readonly HealthProbe[];
+  /**
+   * What this deployment was configured to route to — providers, models,
+   * routes, and which environment variable holds each key.
+   *
+   * Read-only, and exposed because "am I configured?" is a question a product
+   * has to answer before anybody types anything, and it could not: the config
+   * was loaded, used to build a gateway, and dropped. A surface that wants to
+   * say *which* key is missing needs the name the deployment chose, which lives
+   * only here. It carries no secret — `apiKeyEnv` is a variable's name, not its
+   * value.
+   */
+  readonly models: ModelConfig;
   close(): Promise<void>;
 }
 
@@ -383,6 +396,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     modelKeys,
     lifecycle: options.lifecycle ?? new Lifecycle(),
     probes: [databaseProbe(pool)],
+    models: modelConfig,
     close: async () => {
       // Spans first: the last steps of a turn are usually the ones explaining
       // why the process is going down, and they are lost once the queue is.

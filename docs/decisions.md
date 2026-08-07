@@ -159,6 +159,19 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **The harness exposes the configuration it loaded, because "am I set up?"
+  had no answer.** `createHarness` read `config/models.json`, built a gateway
+  from it and dropped it — so nothing could say *which* key was missing, and the
+  name is the deployment's own (`apiKeyEnv`), not one a page could guess. It is
+  now `harness.models`, read-only, carrying no secret: a variable's name is not
+  its value. The console's Home assembles the whole picture from ports —
+  `readiness` for the database, `vault` and `onboarding` for what a master key
+  unlocks, `models` for what was configured to route to — instead of each page
+  discovering its own prerequisite the hard way. **A missing option is not a
+  fault**: an absent model key is `optional`, not broken, because everything
+  except the playground and the evals works without one and colouring it red
+  teaches people to ignore red. It is also the first consumer `readiness` has
+  had; it was built for `/readyz` and used by nothing, which is how a port rots.
 - **The console uses shadcn/ui with the Claude theme, and doc 21 said when.**
   That document deliberately left the UI library to "the first screen that
   genuinely needs it", which is a good way to avoid choosing early and a bad way

@@ -73,6 +73,26 @@ rather than editing it by hand.
   answers who we are acting as, so adding real authentication is a change in one
   place rather than a hunt through forty files.
 
+## Home
+
+The page that answers *"is this set up?"* — which the console could not, because
+each page knew only what **it** needed. Connections knew about the master key;
+the playground knew about a model key. Somebody opening the console for the
+first time discovered their setup one failed page at a time.
+
+It shows **the parts** (database, credential vault, model providers,
+connectable sources, modules), each with what it is in one line and what to do
+when something is missing; **the integrations** with their logos and the
+accounts connected to each; what it has been doing lately; and the way to the
+pages that matter.
+
+A part is red only when something is genuinely wrong. **A missing model key is
+`optional`, not broken** — everything except the playground and the evals works
+without one, and colouring it red teaches people to ignore red.
+
+It is also where `readiness` finally has a consumer. That port was built for
+`/readyz` and used by nothing, which is how a port rots.
+
 ## What is here now (phase 0)
 
 Read-only: **Overview**, **Traces** (list and one turn step by step), **Cost**,

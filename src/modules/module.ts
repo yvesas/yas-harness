@@ -14,6 +14,34 @@
 import type { ToolRegistry } from '../core/tool.js';
 import type { ContextDiscloser } from '../pools/context.js';
 
+/**
+ * What a module says about handling its own turns.
+ *
+ * Deliberately small. A module that needs more than an instruction and a couple
+ * of limits is a module doing the product's job — and the harness has no
+ * opinion about that job, which is the Golden Rule.
+ */
+export interface ModuleAgent {
+  /**
+   * Appended to the product's persona when this module is the one answering.
+   *
+   * Appended rather than substituted: a product's voice, safety rules and
+   * language should survive whichever module handles a turn. A module that
+   * could replace the whole system prompt could quietly undo them.
+   */
+  readonly instructions?: string;
+  /**
+   * The kind of work this module's turns are, when it differs.
+   *
+   * A module that only files notes can say `simple` and route to a cheap model;
+   * one that reads contracts can say `sensitive` and never reach one. Absent,
+   * the persona's own kind applies.
+   */
+  readonly task?: 'simple' | 'reasoning' | 'sensitive';
+  /** Tool round-trips this module's turns may take. Absent, the persona's. */
+  readonly maxToolIterations?: number;
+}
+
 export interface ModuleDefinition {
   /** Stable id used in routing decisions and traces. */
   readonly id: string;
@@ -34,6 +62,19 @@ export interface ModuleDefinition {
    * refuse with a reason. See `src/pools/context.ts`.
    */
   readonly disclose?: ContextDiscloser;
+  /**
+   * How this module works when the router hands it a turn.
+   *
+   * A module is a **semi-autonomous agent**, not a bag of tools: the central
+   * agent delegates to it rather than micromanaging it (doc 13, decision 3). So
+   * a module may say how it should behave, and what it says is layered on the
+   * product's persona rather than replacing it — the product decides the voice,
+   * the module decides the job.
+   *
+   * Every field is optional, and a module that declares none behaves exactly as
+   * modules did before this existed: the product's persona, unchanged.
+   */
+  readonly agent?: ModuleAgent;
 }
 
 /** Module ids the router can name: lowercase, no spaces. */

@@ -45,6 +45,9 @@ export async function send(form: FormData): Promise<void> {
       tenantId: tenant.id,
       sessionId,
       input,
+      // The decision, acted on. Passing only the trace id -- which is what this
+      // did -- meant the router chose a module and the turn ignored it.
+      moduleId: decision.moduleId,
       traceId: decision.traceId,
     });
   } catch (error) {

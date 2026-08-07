@@ -135,6 +135,13 @@ function notesModule(pools: () => Promise<PoolStore>, agent: ToolRegistry) {
     id: NOTES,
     description: 'Short written notes, kept under titles and recalled by title.',
     tools,
+    agent: {
+      instructions:
+        'You are handling notes. Keep replies to a sentence, and confirm what was written down.',
+      // Filing a note needs no reasoning, and routing it to a premium model
+      // would spend the difference on nothing.
+      task: 'simple' as const,
+    },
     /**
      * Titles, never bodies — and only when a purpose was stated.
      *
@@ -215,6 +222,11 @@ function linksModule(pools: () => Promise<PoolStore>, agent: ToolRegistry) {
     id: LINKS,
     description: 'Saved links, each with the reason it was worth keeping.',
     tools,
+    agent: {
+      instructions:
+        'You are handling saved links. When saving one, repeat back the reason it was kept.',
+      task: 'simple' as const,
+    },
     // No `disclose`, on purpose: a module that declares nothing shares nothing.
     // The Modules page shows that as a fact rather than an omission.
   };

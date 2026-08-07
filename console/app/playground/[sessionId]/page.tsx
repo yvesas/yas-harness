@@ -19,9 +19,17 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Conversation({ params }: { params: Promise<{ sessionId: string }> }) {
+export default async function Conversation({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ sessionId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   try {
     const { sessionId } = await params;
+    const failedParam = (await searchParams)['failed'];
+    const failed = Array.isArray(failedParam) ? failedParam[0] : failedParam;
     const tenant = await currentTenant();
     const api = await harness();
 
@@ -85,6 +93,17 @@ export default async function Conversation({ params }: { params: Promise<{ sessi
                 </div>
               ))
             )}
+
+            {failed ? (
+              <div className="border-destructive/40 bg-destructive/5 mb-3 rounded-md border p-3">
+                <div className="text-destructive text-sm font-medium">The turn did not finish</div>
+                <div className="text-muted-foreground mt-1 text-sm">{failed}</div>
+                <div className="text-muted-foreground mt-2 text-sm">
+                  The trace beside this shows how far it got. The conversation is intact — say
+                  something else when it is fixed.
+                </div>
+              </div>
+            ) : null}
 
             <form action={send}>
               <input type="hidden" name="sessionId" value={sessionId} />

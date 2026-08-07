@@ -11,6 +11,7 @@
 
 import type { ReactNode } from 'react';
 
+import { Nav } from '@/components/nav';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -20,18 +21,6 @@ export const metadata = {
   title: 'yas-console',
   description: 'See the harness, and drive it',
 };
-
-const PAGES = [
-  { href: '/', label: 'Overview' },
-  { href: '/connections', label: 'Connections' },
-  { href: '/approvals', label: 'Approvals' },
-  { href: '/playground', label: 'Playground' },
-  { href: '/traces', label: 'Traces' },
-  { href: '/cost', label: 'Cost' },
-  { href: '/modules', label: 'Modules' },
-  { href: '/config', label: 'Config' },
-  { href: '/evals', label: 'Evals' },
-] as const;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -46,17 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <a href="/" className="font-semibold tracking-tight">
                 yas-console
               </a>
-              <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                {PAGES.map((page) => (
-                  <a
-                    key={page.href}
-                    href={page.href}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {page.label}
-                  </a>
-                ))}
-              </nav>
+              <Nav />
               <div className="ml-auto">
                 <ThemeToggle />
               </div>

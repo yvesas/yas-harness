@@ -159,6 +159,15 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **`start.sh` forces a recreate, because `.env` is not part of what compose
+  watches.** Compose decides whether to rebuild a container from the *service
+  definition*; the contents of an `env_file` are not in it. So adding a key to
+  `.env` and running `docker compose up -d` leaves the running container with
+  the environment it started with — which looks exactly like the key not
+  working, and is the next thing anybody does after being told to put a key in
+  `.env`. Found by testing that path before somebody walked it: the container
+  kept a stale value across two `up -d` calls, same creation timestamp both
+  times. A recreate costs seconds and the script exists so this never happens.
 - **A failed turn is an answer, not a crash — and the console owns its error
   screen.** Sending a message with no model key configured let the error out of
   the server action, which replaced the whole page with Next's own "This page

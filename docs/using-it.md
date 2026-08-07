@@ -64,7 +64,8 @@ variable holds each key**. The shipped config names them by the role they play:
 | `premium` | Reasoning, and anything sensitive | `PREMIUM_MODEL_API_KEY` |
 | `fast` | Triage and simple work | `FAST_MODEL_API_KEY` |
 
-Put one in `.env` and restart. Who is behind each name is your choice: `fast` is
+Put one in `.env` and run `./start.sh` again. Who is behind each name is your
+choice: `fast` is
 any OpenAI-compatible endpoint — Groq, Together, Fireworks, Cerebras, OpenAI, or
 a local Ollama — and changing vendor is changing a base URL in
 `config/models.json`.
@@ -131,6 +132,13 @@ them apart.
 
 **Restart after editing `config/`.** The harness reads it at startup. The
 Config page validates and writes; it does not reload a running process.
+
+**After editing `.env`, restart with `./start.sh`** — not `docker compose up -d`
+on its own. Compose decides whether to recreate a container from the *service
+definition*, and the contents of `.env` are not part of it, so a running
+container keeps the environment it started with. That looks exactly like a key
+not working. `./start.sh` forces the recreate; `docker compose up -d
+--force-recreate` does the same if you prefer the long way.
 
 ## What it does with your data
 

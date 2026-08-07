@@ -24,6 +24,7 @@ const PAGES = [
   { href: '/traces', label: 'Traces' },
   { href: '/cost', label: 'Cost' },
   { href: '/modules', label: 'Modules' },
+  { href: '/keys', label: 'Keys' },
   { href: '/config', label: 'Config' },
   { href: '/evals', label: 'Evals' },
 ] as const;

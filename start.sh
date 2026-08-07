@@ -185,7 +185,12 @@ fi
 step 'Starting'
 hint 'The first run builds images; expect a few minutes.'
 
-if ! docker compose up -d --build; then
+# --force-recreate because compose decides whether to recreate a container from
+# the *service definition*, and the contents of `.env` are not part of it. Add a
+# key to `.env`, run `docker compose up -d`, and the running container keeps the
+# environment it started with — which looks exactly like the key not working.
+# This script exists so that never happens; a recreate costs seconds.
+if ! docker compose up -d --build --force-recreate; then
   fail 'Compose could not start everything.' \
     'The output above says which service failed.' \
     'To see more:  docker compose logs'

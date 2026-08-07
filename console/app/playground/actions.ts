@@ -36,15 +36,27 @@ export async function send(form: FormData): Promise<void> {
   const api = await harness();
   const attribution = { tenantId: tenant.id, sessionId };
 
-  // Routing first, and its trace id is carried into the turn. Two traces would
-  // mean opening two pages to answer one question.
-  const decision = await api.router.route({ text: input, attribution });
-  await api.agent.run({
-    tenantId: tenant.id,
-    sessionId,
-    input,
-    traceId: decision.traceId,
-  });
+  let failure: string | null = null;
+  try {
+    // Routing first, and its trace id is carried into the turn. Two traces
+    // would mean opening two pages to answer one question.
+    const decision = await api.router.route({ text: input, attribution });
+    await api.agent.run({
+      tenantId: tenant.id,
+      sessionId,
+      input,
+      traceId: decision.traceId,
+    });
+  } catch (error) {
+    // Caught, because a turn failing is an ordinary answer here — an absent
+    // model key, a provider refusing, a tool throwing. Letting it out of the
+    // action replaces the whole page with an error boundary, which loses the
+    // conversation, the trace that shows how far it got, and the input box.
+    failure = error instanceof Error ? error.message : String(error);
+  }
 
   revalidatePath(`/playground/${sessionId}`);
+  if (failure !== null) {
+    redirect(`/playground/${sessionId}?failed=${encodeURIComponent(failure.slice(0, 300))}`);
+  }
 }

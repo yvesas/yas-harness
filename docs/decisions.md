@@ -159,6 +159,21 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **A failed turn is an answer, not a crash — and the console owns its error
+  screen.** Sending a message with no model key configured let the error out of
+  the server action, which replaced the whole page with Next's own "This page
+  couldn't load" — losing the conversation, the trace showing how far the turn
+  got, and the input box, and showing a screen with none of the console's
+  styling at the exact moment the system stopped being legible. Two fixes, and
+  they are different in kind. The action now **catches**: a turn failing is
+  ordinary here — an absent key, a provider refusing, a tool throwing — so it
+  surfaces beside the input while the page stays intact. And `app/error.tsx`
+  plus `app/global-error.tsx` mean anything that still escapes lands somewhere
+  that looks like the console and offers the two things that help, try again or
+  go somewhere that works. The global one renders plain on purpose: it is the
+  layout itself failing, so there is no theme to rely on, and it says that
+  rather than pretending. Separately, the nav now marks the page you are on, by
+  **prefix** rather than equality, so `/traces/<id>` lights up Traces.
 - **The harness exposes the configuration it loaded, because "am I set up?"
   had no answer.** `createHarness` read `config/models.json`, built a gateway
   from it and dropped it — so nothing could say *which* key was missing, and the

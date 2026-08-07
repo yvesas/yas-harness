@@ -24,14 +24,14 @@ export default async function Evals() {
 
     return (
       <>
-        <h1>Evals</h1>
-        <p className="muted">
+        <h1 className="text-2xl font-semibold tracking-tight">Evals</h1>
+        <p className="text-muted-foreground text-sm">
           The router decides on the cheap tier — that is what makes it cheap, and what makes it
           worth measuring. Its hit rate moves whenever the routes, the models or the modules change,
           so it is a number to re-check rather than one to establish once.
         </p>
 
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           Registered right now: {modules.map((module) => module.id).join(', ') || 'nothing'}. A case
           expecting anything else will fail, which is usually the case being wrong rather than the
           router.
@@ -41,7 +41,7 @@ export default async function Evals() {
           modules={modules.map((module) => ({ id: module.id, description: module.description }))}
         />
 
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           Cases are typed here rather than read from a file: they are a question somebody is asking
           now, and writing them to disk to answer it would turn an experiment into a commit. A set
           worth keeping belongs in the repository, next to the module it guards.

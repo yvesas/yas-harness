@@ -4,12 +4,15 @@
 /**
  * The frame every page sits in.
  *
- * No UI library, deliberately: doc 21 leaves that choice to the first screen
- * that genuinely needs it, and an operator console that reads well in plain
- * elements has not earned a dependency yet.
+ * shadcn/ui with the Claude theme, which doc 21 left to "the first screen that
+ * genuinely needs it". That screen arrived when the console stopped being a way
+ * to check the harness and became the way to use it.
  */
 
 import type { ReactNode } from 'react';
+
+import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 import './globals.css';
 
@@ -32,19 +35,35 @@ const PAGES = [
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <header>
-          <strong>yas-console</strong>
-          <nav>
-            {PAGES.map((page) => (
-              <a key={page.href} href={page.href}>
-                {page.label}
+    // suppressHydrationWarning because next-themes writes the class on the html
+    // element before React hydrates — which is the whole point of it, and which
+    // React would otherwise complain about.
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-background text-foreground min-h-svh antialiased">
+        <ThemeProvider>
+          <header className="border-border/60 sticky top-0 z-10 border-b backdrop-blur">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-3">
+              <a href="/" className="font-semibold tracking-tight">
+                yas-console
               </a>
-            ))}
-          </nav>
-        </header>
-        <main>{children}</main>
+              <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                {PAGES.map((page) => (
+                  <a
+                    key={page.href}
+                    href={page.href}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {page.label}
+                  </a>
+                ))}
+              </nav>
+              <div className="ml-auto">
+                <ThemeToggle />
+              </div>
+            </div>
+          </header>
+          <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   );

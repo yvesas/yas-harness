@@ -14,6 +14,8 @@ import { currentTenant } from '../../../lib/tenant';
 import { harness } from '../../../lib/harness';
 import { Failure } from '../../failure';
 import { send } from '../actions';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +29,8 @@ export default async function Conversation({ params }: { params: Promise<{ sessi
     if (!session) {
       return (
         <>
-          <h1>Conversation not found</h1>
-          <p className="muted">
+          <h1 className="text-2xl font-semibold tracking-tight">Conversation not found</h1>
+          <p className="text-muted-foreground text-sm">
             No session with that id for this tenant — which is also what another tenant&rsquo;s
             conversation looks like from here.
           </p>
@@ -47,30 +49,36 @@ export default async function Conversation({ params }: { params: Promise<{ sessi
 
     return (
       <>
-        <h1>Conversation</h1>
-        <p className="muted">
+        <h1 className="text-2xl font-semibold tracking-tight">Conversation</h1>
+        <p className="text-muted-foreground text-sm">
           <code>{sessionId}</code> · persona <code>{session.personaId}</code>
         </p>
 
         <div className="split">
           <section>
-            <h2>Messages</h2>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">Messages</h2>
             {messages.length === 0 ? (
-              <p className="muted">Nothing said yet. The demo modules keep notes and links.</p>
+              <p className="text-muted-foreground text-sm">
+                Nothing said yet. The demo modules keep notes and links.
+              </p>
             ) : (
               messages.map((message) => (
                 <div key={message.id} className="turn">
-                  <div className="muted">{message.role}</div>
+                  <div className="text-muted-foreground text-sm">{message.role}</div>
                   {message.content.map((part, index) => (
                     <div key={index}>
                       {part.type === 'text' ? (
                         part.text
                       ) : part.type === 'tool_call' ? (
-                        <code className="muted">
+                        <code className="text-muted-foreground text-sm">
                           → {part.name} {JSON.stringify(part.input)}
                         </code>
                       ) : (
-                        <code className={part.isError ? 'failed' : 'muted'}>← {part.content}</code>
+                        <code
+                          className={part.isError ? 'text-destructive' : 'text-muted-foreground'}
+                        >
+                          ← {part.content}
+                        </code>
                       )}
                     </div>
                   ))}
@@ -87,40 +95,46 @@ export default async function Conversation({ params }: { params: Promise<{ sessi
                 placeholder="Say something"
                 autoFocus
               />{' '}
-              <button type="submit">Send</button>
+              <Button type="submit" size="sm">
+                Send
+              </Button>
             </form>
-            <p className="muted">
+            <p className="text-muted-foreground text-sm">
               A turn with no model key configured fails here and says so — the harness builds a
               provider on first use, so everything else on this console works without one.
             </p>
           </section>
 
           <section>
-            <h2>Last turn</h2>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">Last turn</h2>
             {steps.length === 0 ? (
-              <p className="muted">No turn recorded yet.</p>
+              <p className="text-muted-foreground text-sm">No turn recorded yet.</p>
             ) : (
-              <table>
-                <tbody>
+              <Table>
+                <TableBody>
                   {steps.map((step) => (
-                    <tr key={step.sequence}>
-                      <td className={step.succeeded ? undefined : 'failed'}>{step.kind}</td>
-                      <td>
+                    <TableRow key={step.sequence}>
+                      <TableCell className={step.succeeded ? undefined : 'text-destructive'}>
+                        {step.kind}
+                      </TableCell>
+                      <TableCell>
                         <code>{step.label ?? '—'}</code>
                         {step.errorMessage ? (
-                          <div className="failed">{step.errorMessage}</div>
+                          <div className="text-destructive">{step.errorMessage}</div>
                         ) : null}
                         {step.kind === 'route' && step.detail ? (
-                          <div className="muted">{String(step.detail['reason'] ?? '')}</div>
+                          <div className="text-muted-foreground text-sm">
+                            {String(step.detail['reason'] ?? '')}
+                          </div>
                         ) : null}
-                      </td>
-                      <td className="muted">
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
                         {step.durationMs === undefined ? '' : `${step.durationMs}ms`}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
             {turns[0] ? (
               <p>

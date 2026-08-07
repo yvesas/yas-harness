@@ -16,6 +16,14 @@
 import { currentTenant } from '../../../lib/tenant';
 import { harness } from '../../../lib/harness';
 import { Failure } from '../../failure';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +36,8 @@ export default async function Trace({ params }: { params: Promise<{ traceId: str
     if (steps.length === 0) {
       return (
         <>
-          <h1>Turn not found</h1>
-          <p className="muted">
+          <h1 className="text-2xl font-semibold tracking-tight">Turn not found</h1>
+          <p className="text-muted-foreground text-sm">
             No steps under <code>{traceId}</code> for this tenant. A trace is scoped to its tenant,
             so this is also what another tenant&rsquo;s turn looks like from here.
           </p>
@@ -41,40 +49,48 @@ export default async function Trace({ params }: { params: Promise<{ traceId: str
 
     return (
       <>
-        <h1>Turn</h1>
-        <p className="muted">
+        <h1 className="text-2xl font-semibold tracking-tight">Turn</h1>
+        <p className="text-muted-foreground text-sm">
           <code>{traceId}</code> · {steps.length} steps · {total}ms of measured work
         </p>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Step</th>
-              <th>What</th>
-              <th>Took</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>#</TableHead>
+              <TableHead>Step</TableHead>
+              <TableHead>What</TableHead>
+              <TableHead>Took</TableHead>
+              <TableHead>Detail</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {steps.map((step) => (
-              <tr key={step.sequence}>
-                <td className="muted">{step.sequence}</td>
-                <td className={step.succeeded ? undefined : 'failed'}>{step.kind}</td>
-                <td>
+              <TableRow key={step.sequence}>
+                <TableCell className="text-muted-foreground text-sm">{step.sequence}</TableCell>
+                <TableCell className={step.succeeded ? undefined : 'text-destructive'}>
+                  {step.kind}
+                </TableCell>
+                <TableCell>
                   <code>{step.label ?? '—'}</code>
-                </td>
-                <td>{step.durationMs === undefined ? '—' : `${step.durationMs}ms`}</td>
-                <td>
-                  {step.errorMessage ? <div className="failed">{step.errorMessage}</div> : null}
-                  {step.detail ? (
-                    <code className="muted">{JSON.stringify(step.detail)}</code>
+                </TableCell>
+                <TableCell>
+                  {step.durationMs === undefined ? '—' : `${step.durationMs}ms`}
+                </TableCell>
+                <TableCell>
+                  {step.errorMessage ? (
+                    <div className="text-destructive">{step.errorMessage}</div>
                   ) : null}
-                </td>
-              </tr>
+                  {step.detail ? (
+                    <code className="text-muted-foreground text-sm">
+                      {JSON.stringify(step.detail)}
+                    </code>
+                  ) : null}
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-        <p className="muted">
+          </TableBody>
+        </Table>
+        <p className="text-muted-foreground text-sm">
           Measured work is the sum of the steps that reported a duration, not wall-clock for the
           turn — a step that never returned reports nothing.
         </p>

@@ -37,6 +37,23 @@ already exist — the console **fails** rather than creating one, because a
 console that mints the thing it is meant to be showing you renders an empty
 dashboard that looks like a working one.
 
+## Look
+
+shadcn/ui with the **Claude theme** from shadcnstudio, on Tailwind v4. Doc 21
+left the UI library to "the first screen that genuinely needs it" — that screen
+arrived when the console stopped being a way to check the harness and became the
+way to use it.
+
+Light and dark, defaulting to the system's. `next-themes` rather than a
+`useState`, for one reason worth a dependency: it writes the class before the
+first paint, so there is no flash of the wrong theme on a console somebody keeps
+open all day.
+
+Components are **copied in**, not imported from a package — that is what shadcn
+is. `components/ui/` is ours to edit, and `npx shadcn@latest add <name>` brings
+more. The theme lives in `app/globals.css` as CSS variables; regenerate it
+rather than editing it by hand.
+
 ## Rules it holds to
 
 - **It edits files; it does not replace files with a database.** Configuration

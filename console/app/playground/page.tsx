@@ -14,6 +14,15 @@ import { currentTenant } from '../../lib/tenant';
 import { harness } from '../../lib/harness';
 import { Failure } from '../failure';
 import { startConversation } from './actions';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,47 +33,51 @@ export default async function Playground() {
 
     return (
       <>
-        <h1>Playground</h1>
-        <p className="muted">
+        <h1 className="text-2xl font-semibold tracking-tight">Playground</h1>
+        <p className="text-muted-foreground text-sm">
           Talk to the agent and watch the trace beside it: input, the routing decision, every model
           call, every tool, and how the turn ended. It is the loop the harness is for — configure,
           converse, read what happened, adjust.
         </p>
 
         <form action={startConversation}>
-          <button type="submit">New conversation</button>
+          <Button type="submit" size="sm">
+            New conversation
+          </Button>
         </form>
 
-        <h2>Recent</h2>
+        <h2 className="mt-8 text-lg font-semibold tracking-tight">Recent</h2>
         {sessions.length === 0 ? (
-          <p className="muted">No conversations yet.</p>
+          <p className="text-muted-foreground text-sm">No conversations yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Last activity</th>
-                <th>Messages</th>
-                <th>Persona</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Last activity</TableHead>
+                <TableHead>Messages</TableHead>
+                <TableHead>Persona</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {sessions.map((session) => (
-                <tr key={session.id}>
-                  <td>{session.lastActivityAt.toISOString().replace('T', ' ').slice(0, 19)}</td>
-                  <td>{session.messages}</td>
-                  <td className="muted">
+                <TableRow key={session.id}>
+                  <TableCell>
+                    {session.lastActivityAt.toISOString().replace('T', ' ').slice(0, 19)}
+                  </TableCell>
+                  <TableCell>{session.messages}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
                     <code>{session.personaId}</code>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <a href={`/playground/${session.id}`}>Open</a>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           Ordered by last activity, not by when they were opened: a conversation replied to this
           morning matters more than one started last week and abandoned.
         </p>

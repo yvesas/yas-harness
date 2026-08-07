@@ -159,6 +159,21 @@ ADR instead.
   yesterday's output and failed in CI, which compiles on install. A gate that
   can be green on stale artefacts is not a gate; the build now runs first, and
   the local command exercises what CI does.
+- **The console uses shadcn/ui with the Claude theme, and doc 21 said when.**
+  That document deliberately left the UI library to "the first screen that
+  genuinely needs it", which is a good way to avoid choosing early and a bad way
+  to never choose. The screen arrived when the console stopped being a way to
+  *check* the harness and became the way to *use* it. Three things follow.
+  **Components are copied in, not depended on** — that is what shadcn is, so
+  `console/components/ui/` is ours to edit and there is no library version to
+  chase. **The theme is CSS variables** in `globals.css`, generated from a
+  registry; it is regenerated rather than hand-edited, and the file says so.
+  **Light and dark default to the system's**, through `next-themes` rather than
+  a `useState`, for the one reason worth a dependency: it writes the class
+  before the first paint, and a console somebody keeps open all day should not
+  flash the wrong theme at them. The migration was mechanical enough to script,
+  which is how it stayed a styling change rather than a rewrite — the copy on
+  every page is untouched.
 - **A server action that changes what a page shows has to say so.**
   Disconnecting removed the connection and the page kept rendering the list it
   had, so somebody who had just disconnected needed a refresh to believe it. The

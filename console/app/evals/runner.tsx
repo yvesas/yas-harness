@@ -15,6 +15,15 @@
 import { useActionState } from 'react';
 
 import { runRouterEval, type EvalOutcome } from './actions';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 
 export function RouterEval({
   modules,
@@ -45,51 +54,51 @@ export function RouterEval({
           spellCheck={false}
           style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: '0.85rem' }}
         />
-        <button type="submit" disabled={pending}>
+        <Button size="sm" type="submit" disabled={pending}>
           {pending ? 'Running…' : 'Run'}
-        </button>
+        </Button>
       </form>
 
-      {outcome?.error ? <p className="failed">{outcome.error}</p> : null}
+      {outcome?.error ? <p className="text-destructive">{outcome.error}</p> : null}
 
       {outcome?.report ? (
         <>
-          <h2>
+          <h2 className="mt-8 text-lg font-semibold tracking-tight">
             {outcome.report.correct} of {outcome.report.total} —{' '}
             {(outcome.report.accuracy * 100).toFixed(0)}%
           </h2>
-          <table>
-            <thead>
-              <tr>
-                <th />
-                <th>Input</th>
-                <th>Expected</th>
-                <th>Chose</th>
-                <th>Confidence</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead />
+                <TableHead>Input</TableHead>
+                <TableHead>Expected</TableHead>
+                <TableHead>Chose</TableHead>
+                <TableHead>Confidence</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {outcome.report.outcomes.map((entry, index) => (
-                <tr key={index}>
-                  <td className={entry.correct ? undefined : 'failed'}>
+                <TableRow key={index}>
+                  <TableCell className={entry.correct ? undefined : 'text-destructive'}>
                     {entry.correct ? '✓' : '✗'}
-                  </td>
-                  <td>{entry.input}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell>{entry.input}</TableCell>
+                  <TableCell>
                     <code>{entry.expected}</code>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <code>{entry.actual ?? '—'}</code>
-                    {entry.error ? <div className="failed">{entry.error}</div> : null}
-                  </td>
-                  <td className="muted">
+                    {entry.error ? <div className="text-destructive">{entry.error}</div> : null}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
                     {entry.confidence === null ? '' : entry.confidence.toFixed(2)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-          <p className="muted">
+            </TableBody>
+          </Table>
+          <p className="text-muted-foreground text-sm">
             Confidence is worth reading next to a failure. Wrong and sure is a module description
             that misleads the router; wrong and unsure is a case that is genuinely ambiguous, and
             the fix is in different places.

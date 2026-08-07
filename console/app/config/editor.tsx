@@ -21,6 +21,7 @@ import { useActionState, useState } from 'react';
 
 import { diff, type ConfigFile } from '../../lib/config-shape';
 import { saveConfig, type SaveOutcome } from './actions';
+import { Button } from '@/components/ui/button';
 
 export function Editor({ file, text }: { file: ConfigFile; text: string }) {
   const [draft, setDraft] = useState(text);
@@ -43,23 +44,29 @@ export function Editor({ file, text }: { file: ConfigFile; text: string }) {
           spellCheck={false}
           style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: '0.85rem' }}
         />
-        <button type="submit" disabled={pending || malformed !== null || draft === text}>
+        <Button size="sm" type="submit" disabled={pending || malformed !== null || draft === text}>
           {pending ? 'Saving…' : 'Save'}
-        </button>{' '}
-        {malformed === null ? null : <span className="failed">{malformed}</span>}
+        </Button>{' '}
+        {malformed === null ? null : <span className="text-destructive">{malformed}</span>}
         {outcome ? (
-          <span className={outcome.ok ? undefined : 'failed'}> {outcome.message}</span>
+          <span className={outcome.ok ? undefined : 'text-destructive'}> {outcome.message}</span>
         ) : null}
       </form>
 
       {changes.length > 0 ? (
         <>
-          <h2>What saving would change</h2>
-          <pre>
+          <h2 className="mt-8 text-lg font-semibold tracking-tight">What saving would change</h2>
+          <pre className="bg-muted overflow-x-auto rounded-md p-3 text-sm">
             {changes.map((line, index) => (
               <div
                 key={index}
-                className={line.sign === ' ' ? 'muted' : line.sign === '-' ? 'failed' : undefined}
+                className={
+                  line.sign === ' '
+                    ? 'text-muted-foreground'
+                    : line.sign === '-'
+                      ? 'text-destructive'
+                      : undefined
+                }
               >
                 {line.sign}
                 {line.text}

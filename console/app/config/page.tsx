@@ -31,8 +31,8 @@ export default async function Config({
 
     return (
       <>
-        <h1>Configuration</h1>
-        <p className="muted">
+        <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
+        <p className="text-muted-foreground text-sm">
           These are the files in <code>config/</code>, versioned in Git. The console edits them; it
           does not replace them with a database — that would cost the history, the review of a price
           change and a reproducible deploy, and buy a form. Editing them with <code>vim</code> keeps
@@ -48,19 +48,19 @@ export default async function Config({
         </nav>
 
         {document.exists ? null : (
-          <p className="muted">
+          <p className="text-muted-foreground text-sm">
             <code>{file}</code> does not exist yet. Saving creates it.
           </p>
         )}
 
         <Editor file={file} text={document.text} />
 
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           A draft is checked with the harness&rsquo;s own parsers before it is written — the same{' '}
           <code>parseModelConfig</code> it boots with, not a second schema that agrees today and
           drifts by Christmas. Nothing that would stop the harness starting reaches the disk.
         </p>
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           Secrets are never resolved here. <code>connectors.json</code> keeps its{' '}
           <code>
             ${'{'}CLIENT_SECRET{'}'}

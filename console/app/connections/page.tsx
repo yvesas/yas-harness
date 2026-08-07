@@ -14,6 +14,15 @@ import { currentTenant } from '../../lib/tenant';
 import { harness } from '../../lib/harness';
 import { Failure } from '../failure';
 import { connect, disconnect } from './actions';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,14 +39,14 @@ export default async function Connections({
     if (!api.onboarding) {
       return (
         <>
-          <h1>Connections</h1>
-          <p className="muted">
+          <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
+          <p className="text-muted-foreground text-sm">
             Nothing can be connected yet. The console needs two things: a{' '}
             <code>MASTER_ENCRYPTION_KEY</code>, without which there is nowhere to seal a credential,
             and at least one OAuth provider in <code>config/connectors.json</code> with its client
             id and secret in the environment.
           </p>
-          <p className="muted">
+          <p className="text-muted-foreground text-sm">
             Both are deliberately absent by default — a harness that connects nothing should still
             start.
           </p>
@@ -52,14 +61,14 @@ export default async function Connections({
 
     return (
       <>
-        <h1>Connections</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
 
         {outcome.connected ? (
           <p>
             <strong>Connected {outcome.connected}.</strong> Its credential is sealed under this
             tenant&rsquo;s key and was never written down in the clear.{' '}
             {outcome.scopes ? (
-              <span className="muted">
+              <span className="text-muted-foreground text-sm">
                 Granted: <code>{outcome.scopes}</code>. A provider may grant less than was asked
                 for, so this is what the token actually carries.
               </span>
@@ -69,8 +78,8 @@ export default async function Connections({
         ) : null}
         {outcome.error ? (
           <>
-            <p className="failed">Could not finish connecting: {outcome.error}</p>
-            <p className="muted">
+            <p className="text-destructive">Could not finish connecting: {outcome.error}</p>
+            <p className="text-muted-foreground text-sm">
               Nothing was stored. If a connection row was created before this failed it was removed
               — one that looks connected and cannot authenticate fails later, at a call, and reads
               as the source being down.
@@ -78,80 +87,90 @@ export default async function Connections({
           </>
         ) : null}
 
-        <h2>Connected</h2>
+        <h2 className="mt-8 text-lg font-semibold tracking-tight">Connected</h2>
         {connected.length === 0 ? (
-          <p className="muted">Nothing connected yet.</p>
+          <p className="text-muted-foreground text-sm">Nothing connected yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Account</th>
-                <th>Status</th>
-                <th>Scopes granted</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Source</TableHead>
+                <TableHead>Account</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Scopes granted</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {connected.map((connection) => (
-                <tr key={connection.id}>
-                  <td>
+                <TableRow key={connection.id}>
+                  <TableCell>
                     <code>{connection.connectorId}</code>
-                  </td>
-                  <td>{connection.accountLabel ?? <span className="muted">unnamed</span>}</td>
-                  <td className={connection.status === 'active' ? undefined : 'failed'}>
+                  </TableCell>
+                  <TableCell>
+                    {connection.accountLabel ?? (
+                      <span className="text-muted-foreground text-sm">unnamed</span>
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className={connection.status === 'active' ? undefined : 'text-destructive'}
+                  >
                     {connection.status}
-                  </td>
-                  <td className="muted">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
                     <code>{connection.scopes.join(' ') || '—'}</code>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <form action={disconnect}>
                       <input type="hidden" name="connectionId" value={connection.id} />
-                      <button type="submit">Disconnect</button>
+                      <Button type="submit" size="sm">
+                        Disconnect
+                      </Button>
                     </form>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           Disconnecting erases the sealed credential along with the connection. The token is not
           revoked at the provider — only the source can do that, and doing it here would be a claim
           the console cannot keep.
         </p>
 
-        <h2>Connect a source</h2>
-        <p className="muted">
+        <h2 className="mt-8 text-lg font-semibold tracking-tight">Connect a source</h2>
+        <p className="text-muted-foreground text-sm">
           A source stays here after you connect it, because connecting it again adds{' '}
           <strong>another account</strong> rather than replacing the first — two GitHub logins, two
           Drives. Name them and the list above tells them apart.
         </p>
-        <table>
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th>Will ask for</th>
-              <th>Name (optional)</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Source</TableHead>
+              <TableHead>Will ask for</TableHead>
+              <TableHead>Name (optional)</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {connectable.map((connectorId) => {
               const already = connected.filter(
                 (connection) => connection.connectorId === connectorId,
               ).length;
               return (
-                <tr key={connectorId}>
-                  <td>
+                <TableRow key={connectorId}>
+                  <TableCell>
                     <code>{connectorId}</code>
-                    {already > 0 ? <div className="muted">{already} connected</div> : null}
-                  </td>
-                  <td className="muted">
+                    {already > 0 ? (
+                      <div className="text-muted-foreground text-sm">{already} connected</div>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
                     <code>{api.onboarding?.scopesFor(connectorId).join(' ')}</code>
-                  </td>
-                  <td colSpan={2}>
+                  </TableCell>
+                  <TableCell colSpan={2}>
                     <form action={connect}>
                       <input type="hidden" name="connectorId" value={connectorId} />
                       <input
@@ -161,15 +180,17 @@ export default async function Connections({
                         maxLength={60}
                         placeholder="work account"
                       />{' '}
-                      <button type="submit">Connect</button>
+                      <Button type="submit" size="sm">
+                        Connect
+                      </Button>
                     </form>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
-        <p className="muted">
+          </TableBody>
+        </Table>
+        <p className="text-muted-foreground text-sm">
           Connecting opens the provider&rsquo;s consent screen. Nothing is stored until you come
           back — and the credential is sealed the moment you do, so it is never written down in the
           clear.

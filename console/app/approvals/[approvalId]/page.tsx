@@ -18,6 +18,7 @@ import { currentTenant } from '../../../lib/tenant';
 import { harness } from '../../../lib/harness';
 import { Failure } from '../../failure';
 import { approve, reject } from '../actions';
+import { Button } from '@/components/ui/button';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,8 +32,8 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
     if (!approval) {
       return (
         <>
-          <h1>Not found</h1>
-          <p className="muted">
+          <h1 className="text-2xl font-semibold tracking-tight">Not found</h1>
+          <p className="text-muted-foreground text-sm">
             No approval with that id for this tenant — which is also what another tenant&rsquo;s
             approval looks like from here.
           </p>
@@ -53,19 +54,21 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
 
     return (
       <>
-        <h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
           <code>{approval.toolName}</code>
         </h1>
-        <p className="muted">
+        <p className="text-muted-foreground text-sm">
           Asked {approval.requestedAt.toISOString().replace('T', ' ').slice(0, 19)} · status{' '}
           <strong>{approval.status}</strong>
           {overMcp ? ' · arrived over MCP' : ''}
         </p>
 
-        <h2>It would run with</h2>
-        <pre>{JSON.stringify(approval.input, null, 2)}</pre>
+        <h2 className="mt-8 text-lg font-semibold tracking-tight">It would run with</h2>
+        <pre className="bg-muted overflow-x-auto rounded-md p-3 text-sm">
+          {JSON.stringify(approval.input, null, 2)}
+        </pre>
         {overMcp ? (
-          <p className="muted">
+          <p className="text-muted-foreground text-sm">
             Approving covers <strong>these arguments</strong>, not this tool. A client sending
             anything else asks again — which is what stops approval for something harmless being
             spent on something else.
@@ -77,12 +80,12 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
             <a href={`/traces/${turns[0].traceId}`}>Open the turn that led here</a>
           </p>
         ) : (
-          <p className="muted">No trace recorded for this conversation.</p>
+          <p className="text-muted-foreground text-sm">No trace recorded for this conversation.</p>
         )}
 
         {approval.status === 'pending' ? (
           <>
-            <h2>Decide</h2>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">Decide</h2>
             <form action={approve}>
               <input type="hidden" name="approvalId" value={approval.id} />
               <label>
@@ -90,14 +93,18 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
                 <br />
                 <input type="text" name="reason" size={60} />
               </label>{' '}
-              <button type="submit">Approve</button>
+              <Button type="submit" size="sm">
+                Approve
+              </Button>
             </form>
             <form action={reject}>
               <input type="hidden" name="approvalId" value={approval.id} />
               <input type="hidden" name="reason" value="" />
-              <button type="submit">Reject</button>
+              <Button type="submit" size="sm">
+                Reject
+              </Button>
             </form>
-            <p className="muted">
+            <p className="text-muted-foreground text-sm">
               A rejection should carry a reason: it is the answer somebody has to act on, and
               &ldquo;no&rdquo; with nothing attached gets retried forever. Type it above before
               rejecting.
@@ -105,7 +112,7 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
           </>
         ) : (
           <>
-            <h2>Decided</h2>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">Decided</h2>
             <p>
               {approval.status} by <code>{approval.decidedBy}</code> at{' '}
               {approval.decidedAt?.toISOString().replace('T', ' ').slice(0, 19)}

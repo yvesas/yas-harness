@@ -12,6 +12,14 @@
 
 import { harness } from '../../lib/harness';
 import { Failure } from '../failure';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,43 +29,43 @@ export default async function Modules() {
 
     return (
       <>
-        <h1>Modules</h1>
-        <p className="muted">
+        <h1 className="text-2xl font-semibold tracking-tight">Modules</h1>
+        <p className="text-muted-foreground text-sm">
           Two demonstration modules, and two is the minimum that means anything: the router
           short-circuits with one candidate, and a context request needs somebody to ask somebody
           else.
         </p>
         {modules.map((module) => (
           <section key={module.id}>
-            <h2>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">
               <code>{module.id}</code>
             </h2>
             <p>{module.description}</p>
-            <p className="muted">
+            <p className="text-muted-foreground text-sm">
               {module.disclose
                 ? 'Declares disclose — it decides, per request, what to reveal.'
                 : 'Declares no disclose, so it shares nothing. The broker fails closed.'}
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Tool</th>
-                  <th>Description</th>
-                  <th>Approval</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tool</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Approval</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {module.tools.list().map((tool) => (
-                  <tr key={tool.name}>
-                    <td>
+                  <TableRow key={tool.name}>
+                    <TableCell>
                       <code>{tool.name}</code>
-                    </td>
-                    <td>{tool.description}</td>
-                    <td>{tool.requiresApproval ? 'required' : 'not required'}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>{tool.description}</TableCell>
+                    <TableCell>{tool.requiresApproval ? 'required' : 'not required'}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </section>
         ))}
       </>

@@ -1,0 +1,8 @@
+{
+  "id": "research",
+  "name": "Research",
+  "description": "Reads connected documents and answers questions from them. Never changes anything.",
+  "instructions": "Answer only from what you actually read. Quote the title of what you used. If you did not find it, say so rather than guessing.",
+  "task": "reasoning",
+  "connections": [{ "connectorId": "github", "can": ["list", "read", "search"] }]
+}

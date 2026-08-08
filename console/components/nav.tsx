@@ -20,6 +20,7 @@ const PAGES = [
   { href: '/', label: 'Overview' },
   { href: '/connections', label: 'Connections' },
   { href: '/approvals', label: 'Approvals' },
+  { href: '/agents', label: 'Agents' },
   { href: '/playground', label: 'Playground' },
   { href: '/traces', label: 'Traces' },
   { href: '/cost', label: 'Cost' },

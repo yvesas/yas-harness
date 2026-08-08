@@ -168,6 +168,34 @@ ADR instead.
   `.env`. Found by testing that path before somebody walked it: the container
   kept a stale value across two `up -d` calls, same creation timestamp both
   times. A recreate costs seconds and the script exists so this never happens.
+- **Shared knowledge is a layer beside pools, not a loosening of them
+  (supermemory).** Doc 13's decision 2 rejected "everybody sees everything" for
+  pools, and it still holds: an agent cannot read another agent's *state*. What
+  is new is *knowledge* — documents somebody added, and what the connectors
+  brought — read by whichever agents were granted the **source** it lives in.
+  Source, never document: a grant enumerating documents would be stale the
+  moment anything was ingested. Four calls carry it. **The embedding dimension
+  is schema, not configuration** — the column type is fixed at creation, and a
+  mismatch found at query time is a corpus half-embedded with two incompatible
+  models; the harness therefore checks an adapter's output before the database
+  does, because the database's complaint is about a column and the model is what
+  has to change. **Embeddings are a separate port from the model gateway**, same
+  vendors notwithstanding: a completion has a fallback chain, and an embedding
+  routed to a fallback would silently make yesterday's vectors uncomparable with
+  today's. **A search has a distance ceiling**, because a vector search always
+  returns its nearest neighbours however far away, and without one a question
+  about nothing comes back with the least irrelevant passage. And **an unchanged
+  document is not re-embedded** — the checksum decides, embedding is what costs,
+  and chunks are replaced with their document in one transaction so a failure
+  half way cannot leave a document that exists and cannot be found. Grants name
+  slugs and are resolved at call time, so a grant may precede the source and
+  never goes stale. `pgvector` had been in migration 0001 since the beginning,
+  with a comment saying it was for RAG, used by nothing.
+- **The embedder is built on first use, which is the same mistake twice.**
+  `LazyProvider` exists because a provider reads its key in its constructor;
+  the embedder did the same, so a deployment that declared one without setting
+  the key could not start at all — not even to list what it already knew. Caught
+  by the existing `createHarness` integration test rather than by me.
 - **An agent can be declared instead of written, and its tools come from its
   grants.** A module was TypeScript: to add one you wrote a file, registered it
   and forked the repository — so the person the console is *for* could not add

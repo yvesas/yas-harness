@@ -21,6 +21,10 @@ import { ConnectionOnboarding } from './connections/connection-onboarding.js';
 import { declaredAgent } from './agents/declared-agent.js';
 import { loadAgents } from './agents/load-agents.js';
 import { LazyProvider } from './models/lazy-provider.js';
+import type { MemoryStore } from './memory/memory-store.js';
+import { PostgresMemoryStore } from './memory/postgres-memory-store.js';
+import { OpenAiCompatibleEmbedder } from './memory/openai-compatible-embedder.js';
+import { LazyEmbedder } from './memory/lazy-embedder.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
 import type { CredentialResolver } from './connections/credential-resolver.js';
@@ -144,6 +148,14 @@ export interface Harness {
    * key opts a tenant out of the platform's; see `src/models/model-keys.ts`.
    */
   readonly modelKeys: ModelKeyVault | null;
+  /**
+   * Shared knowledge, or null when no embedding provider is configured.
+   *
+   * Null rather than an empty store: a deployment that cannot embed cannot
+   * search, and a store that accepted documents it could never find again would
+   * be a place things go to be lost.
+   */
+  readonly memory: MemoryStore | null;
   readonly lifecycle: Lifecycle;
   /**
    * What `readiness` should check for this harness — the database, today.
@@ -257,6 +269,38 @@ function routedProvidersFor(modelConfig: Awaited<ReturnType<typeof loadModelConf
  * rather than a code change. No endpoint means no exporter at all: an empty
  * decorator would still allocate a queue and a timer to send nothing.
  */
+/**
+ * The knowledge store, if this deployment can embed.
+ *
+ * The embedding provider is declared in `config/models.json` beside the
+ * completion ones, under `embedding` -- same shape, same reason: a vendor is
+ * configuration, and the harness names none.
+ */
+function memoryStoreFor(
+  pool: pg.Pool,
+  modelConfig: Awaited<ReturnType<typeof loadModelConfig>>,
+): MemoryStore | null {
+  const entry = modelConfig.embedding;
+  if (!entry) {
+    return null;
+  }
+  // Lazily, for the reason `LazyProvider` exists: an embedder reads its key in
+  // its constructor, and a deployment that declared one without setting the key
+  // should still be able to list what it already knows.
+  return new PostgresMemoryStore(
+    pool,
+    new LazyEmbedder(
+      entry.model,
+      () =>
+        new OpenAiCompatibleEmbedder({
+          model: entry.model,
+          baseUrl: entry.baseUrl,
+          apiKeyEnv: entry.apiKeyEnv,
+        }),
+    ),
+  );
+}
+
 function otlpExporter(
   inner: TraceRecorder,
   options: Partial<OtlpExportOptions> = {},
@@ -299,6 +343,11 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const modelKeys = cipher
     ? new ModelKeyVault(cipher, tenantKeys, new PostgresModelKeyStore(pool))
     : null;
+
+  // Shared knowledge, when an embedding provider was configured. Absent, the
+  // memory tool is simply never generated -- an agent granted a source it
+  // cannot search would be worse than one that was never granted it.
+  const memory = memoryStoreFor(pool, modelConfig);
 
   const compressionProfile = options.compressionProfile ?? 'none';
   // A supplied gateway replaces the routed one outright — including the
@@ -379,7 +428,13 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // tools would still be routed to and would answer with nothing.
   if (cachedConnections) {
     for (const config of declared) {
-      modules.register(declaredAgent(config, { operations: cachedConnections, connections }));
+      modules.register(
+        declaredAgent(config, {
+          operations: cachedConnections,
+          connections,
+          ...(memory ? { memory } : {}),
+        }),
+      );
     }
   }
 
@@ -412,6 +467,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     cachedConnections,
     mcpServer,
     modelKeys,
+    memory,
     lifecycle: options.lifecycle ?? new Lifecycle(),
     probes: [databaseProbe(pool)],
     models: modelConfig,
@@ -674,6 +730,23 @@ export type {
 // made building a request through the published package harder than building
 // one in a test.
 export { cachePrefixLength, responseText, toolCalls, userMessage } from './models/model-gateway.js';
+export { PostgresMemoryStore } from './memory/postgres-memory-store.js';
+export { OpenAiCompatibleEmbedder } from './memory/openai-compatible-embedder.js';
+export { LazyEmbedder } from './memory/lazy-embedder.js';
+export { chunk } from './memory/chunking.js';
+export { assertDimensions, EMBEDDING_DIMENSIONS, EmbeddingError } from './memory/embedder.js';
+export type { Embedder } from './memory/embedder.js';
+export { DEFAULT_MAX_DISTANCE, DEFAULT_SEARCH_LIMIT, MemoryError } from './memory/memory-store.js';
+export type {
+  CreateSourceInput,
+  DocumentInput,
+  IngestOutcome,
+  MemorySource,
+  MemoryStore,
+  SearchHit,
+  SearchQuery,
+  StoredDocument,
+} from './memory/memory-store.js';
 export { declaredAgent } from './agents/declared-agent.js';
 export { loadAgents } from './agents/load-agents.js';
 export {

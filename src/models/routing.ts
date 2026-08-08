@@ -76,6 +76,23 @@ export type ModelEntry = z.infer<typeof modelEntrySchema>;
 
 const TASK_KINDS = ['routing', 'simple', 'reasoning', 'sensitive'] as const;
 
+/**
+ * Where embeddings come from, when this deployment wants shared knowledge.
+ *
+ * Beside the completion providers and shaped like them, for the same reason: a
+ * vendor is configuration. Optional — a deployment with no embedding provider
+ * has no supermemory, and says so rather than half-working.
+ */
+export const embeddingProviderSchema = z.object({
+  /** The embedding model's own name, e.g. `text-embedding-3-small`. */
+  model: z.string().min(1),
+  /** Where `/embeddings` lives. */
+  baseUrl: z.string().url(),
+  apiKeyEnv: z.string().min(1),
+});
+
+export type EmbeddingProvider = z.infer<typeof embeddingProviderSchema>;
+
 export const modelConfigSchema = z.object({
   /**
    * Which providers this deployment can reach, keyed by the name its models
@@ -95,6 +112,8 @@ export const modelConfigSchema = z.object({
     reasoning: z.array(z.string().min(1)).min(1),
     sensitive: z.array(z.string().min(1)).min(1),
   }),
+  /** Where embeddings come from. Absent means no shared knowledge. */
+  embedding: embeddingProviderSchema.optional(),
   /** How long one provider call may take before it is abandoned. */
   requestTimeoutMs: z.number().int().min(1_000).max(600_000).default(120_000),
   /** Retries of the same model on a retryable failure, before falling back. */

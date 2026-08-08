@@ -46,7 +46,9 @@ Layout, one responsibility per folder (each has a README stating its boundary):
 | `src/models/` | Model gateway and provider adapters |
 | `src/connections/` | Own OAuth/connection layer |
 | `src/approval/` | Human approval queue |
-| `src/memory/` | Session and conversation context |
+| `src/memory/` | Session context, and the shared knowledge agents are granted |
+| `src/agents/` | Agents declared in `config/agents/`, no code required |
+| `src/workflows/` | Several agents in order, with gates for a person |
 | `src/pools/` | Per-module data pools and cross-module permissions |
 | `src/telemetry/` | Traces and cost accounting |
 | `src/lifecycle/` | Graceful shutdown and health answers (no endpoints) |

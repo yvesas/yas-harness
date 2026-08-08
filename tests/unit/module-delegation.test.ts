@@ -16,12 +16,14 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { InMemoryApprovalStore } from '../../src/approval/in-memory-approval-store.js';
 import { Agent } from '../../src/core/agent.js';
 import { ToolRegistry, ok } from '../../src/core/tool.js';
 import type { Persona } from '../../src/core/persona.js';
 import { InMemorySessionStore } from '../../src/memory/in-memory-session-store.js';
 import { ModuleRegistry } from '../../src/modules/module.js';
 import type { ModelGateway, ModelRequest, ModelResponse } from '../../src/models/model-gateway.js';
+import { ScriptedGateway, callsTool, says } from '../../src/models/scripted-gateway.js';
 import { z } from 'zod';
 
 const PERSONA: Persona = {
@@ -98,7 +100,8 @@ async function build() {
   return { agent, requests, sessionId: session.id };
 }
 
-const TURN = { tenantId: 'tenant-1', input: 'hello' };
+const TENANT = 'tenant-1';
+const TURN = { tenantId: TENANT, input: 'hello' };
 
 describe('a routed turn runs as its module', () => {
   it('offers only that module’s tools', async () => {
@@ -196,5 +199,61 @@ describe('a module the registry does not know', () => {
     await expect(agent.run({ ...TURN, sessionId, moduleId: 'ghost' })).rejects.toThrow(
       /not registered/,
     );
+  });
+});
+
+describe('a delegated turn that paused for approval', () => {
+  it('resumes as the same module, not with the agent’s own tools', async () => {
+    // Without this the resumed turn falls back to the agent's own scope: the
+    // held call is looked up in the wrong registry, and whatever remains of
+    // the turn runs with the wrong instructions and the wrong model tier.
+    const ran: string[] = [];
+    const approvals = new InMemoryApprovalStore();
+    const sessions = new InMemorySessionStore();
+    const modules = new ModuleRegistry().register({
+      id: 'publisher',
+      description: 'Posts things.',
+      agent: { instructions: 'You post.' },
+      tools: new ToolRegistry().register({
+        name: 'post',
+        description: 'Post it. Destructive.',
+        input: z.object({}),
+        requiresApproval: true,
+        execute: () => {
+          ran.push('post');
+          return Promise.resolve(ok('posted'));
+        },
+      }),
+    });
+
+    const agent = new Agent({
+      gateway: new ScriptedGateway([callsTool('post', {}), says('done')]),
+      sessions,
+      // Deliberately empty: nothing here could run `post`.
+      tools: new ToolRegistry(),
+      persona: PERSONA,
+      approvals,
+      modules,
+    });
+    const session = await sessions.create({ tenantId: TENANT, personaId: PERSONA.id });
+
+    const paused = await agent.run({
+      tenantId: TENANT,
+      sessionId: session.id,
+      input: 'post it',
+      moduleId: 'publisher',
+    });
+    expect(paused.stopReason).toBe('awaiting_approval');
+
+    const [waiting] = await approvals.pending(TENANT);
+    await approvals.approve(TENANT, waiting!.id, { decidedBy: 'operator' });
+    const resumed = await agent.resume({
+      tenantId: TENANT,
+      sessionId: session.id,
+      moduleId: 'publisher',
+    });
+
+    expect(ran).toEqual(['post']);
+    expect(resumed.stopReason).toBe('end_turn');
   });
 });

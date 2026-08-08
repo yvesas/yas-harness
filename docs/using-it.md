@@ -44,6 +44,8 @@ and records what it cost. The console is how you watch that happen.
 | **Cost** | Spend by model, task, day and conversation |
 | **Modules** | What is registered and what each can do |
 | **Config** | Edit `config/*.json`, validated before it is saved |
+| **Agents** | Assemble an agent: model, prompt, sources it may reach |
+| **Knowledge** | Documents everything you grant can search |
 | **Evals** | Is the cheap router still getting it right |
 
 ## Two things to set up when you want them
@@ -109,6 +111,46 @@ The secret is **named**, not written — `clientSecretEnv` says which variable
 holds it, and the value goes in `.env`. The client id is not a secret.
 
 Then restart and click **Connect**.
+
+## Several agents in a row
+
+One agent answering one question is the shape of a chat. Work is usually longer
+than that: read the week's issues, draft the summary, and let somebody see it
+before it is posted. That is a **workflow** — a file in `config/workflows/`,
+one per workflow, versioned in Git.
+
+```json
+{
+  "id": "weekly-summary",
+  "name": "Weekly summary",
+  "description": "Reads the week's work, drafts a summary, waits before posting.",
+  "steps": [
+    { "id": "gather", "agent": "research", "prompt": "Find everything in: {{input}}" },
+    { "id": "draft", "agent": "research", "prompt": "Summarise:\n\n{{steps.gather}}" },
+    { "id": "post", "agent": "publisher", "approve": true, "prompt": "Post:\n\n{{steps.draft}}" }
+  ]
+}
+```
+
+Three things about it are worth knowing before you write one.
+
+**Steps do not share a conversation.** Each runs on its own, so one agent's tool
+results never land in another agent's context. What crosses between them is
+only what a prompt quotes with `{{steps.<id>}}` — which means you can read a
+workflow file and know exactly what the third agent was told.
+
+**`"approve": true` stops the run before the step.** Nothing has been sent to a
+model yet; the decision is whether it should be. What waits in **Approvals** is
+the prompt as it would be sent, with the draft already in it — not the template.
+This is a different gate from an agent's own write approval, which holds a tool
+call once the step is already running. Both can happen in one run.
+
+**A waiting run costs nothing.** Its whole state is in the database, so nothing
+is blocked and a restart in the middle loses only the step in flight. Approve
+it a day later and it picks up where it stopped.
+
+Copy `config/workflows/weekly-summary.json.example` to start. A workflow naming
+an agent you have not created refuses to run and says which one is missing.
 
 ## Things that will trip you
 
@@ -178,3 +220,8 @@ Written down rather than discovered:
 - **There is no login.** One function decides which tenant the console acts as.
   It binds to localhost for that reason; do not expose it.
 - **Config changes need a restart** to reach a running harness.
+- **Workflows run in a line.** No branches, no loops, no two steps at once. If
+  a step fails, the run stops there rather than handing the failure to the next
+  step as if it were content.
+- **Nothing starts a workflow on a schedule.** Something has to press the
+  button — the console, your own cron, a webhook you write.

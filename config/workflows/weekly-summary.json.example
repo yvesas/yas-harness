@@ -1,0 +1,24 @@
+{
+  "id": "weekly-summary",
+  "name": "Weekly summary",
+  "description": "Reads the week's work from the connected sources, drafts a summary, and waits for a person before posting it.",
+  "inputLabel": "Which week, and where should it be posted?",
+  "steps": [
+    {
+      "id": "gather",
+      "agent": "research",
+      "prompt": "Find everything that happened in: {{input}}. List it plainly, with the title and link of each thing you actually read. Do not summarise yet."
+    },
+    {
+      "id": "draft",
+      "agent": "research",
+      "prompt": "Write a short summary for the team from these notes. Six bullets at most, plain language, no adjectives that are not in the source.\n\n{{steps.gather}}"
+    },
+    {
+      "id": "post",
+      "agent": "publisher",
+      "approve": true,
+      "prompt": "Post this, unchanged:\n\n{{steps.draft}}"
+    }
+  ]
+}

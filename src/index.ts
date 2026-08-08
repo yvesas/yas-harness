@@ -20,6 +20,11 @@ import { ConnectionManager } from './connections/connection-manager.js';
 import { ConnectionOnboarding } from './connections/connection-onboarding.js';
 import { declaredAgent } from './agents/declared-agent.js';
 import { loadAgents } from './agents/load-agents.js';
+import { loadWorkflows } from './workflows/load-workflows.js';
+import { PostgresWorkflowRunStore } from './workflows/postgres-workflow-run-store.js';
+import { WorkflowRunner } from './workflows/workflow-runner.js';
+import type { WorkflowConfig } from './workflows/workflow-config.js';
+import type { WorkflowRunStore } from './workflows/workflow-run-store.js';
 import { LazyProvider } from './models/lazy-provider.js';
 import type { MemoryStore } from './memory/memory-store.js';
 import { PostgresMemoryStore } from './memory/postgres-memory-store.js';
@@ -156,6 +161,18 @@ export interface Harness {
    * be a place things go to be lost.
    */
   readonly memory: MemoryStore | null;
+  /**
+   * The declared workflows, by id — what a console lists and a caller starts.
+   * Empty when `config/workflows/` holds nothing, which is every deployment
+   * until somebody writes the first one.
+   */
+  readonly workflows: ReadonlyMap<string, WorkflowConfig>;
+  /**
+   * Runs them, and picks them back up after a person decides. Its store is
+   * durable, so a run waiting on somebody survives a deploy.
+   */
+  readonly workflowRunner: WorkflowRunner;
+  readonly workflowRuns: WorkflowRunStore;
   readonly lifecycle: Lifecycle;
   /**
    * What `readiness` should check for this harness — the database, today.
@@ -438,14 +455,25 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     }
   }
 
+  // Declared workflows, from config/workflows/. Loaded here rather than beside
+  // the agents because a workflow names agents, and the ones a product
+  // registers in code arrive after this function returns — so the reference is
+  // checked when a run starts, not now.
+  const workflows = new Map<string, WorkflowConfig>(
+    (await loadWorkflows(join(configDir, 'workflows'))).map((config) => [config.id, config]),
+  );
+
   const traceStore = new PostgresTraceRecorder(pool);
   const exporter = otlpExporter(traceStore, options.otlp);
   const traces = new RedactingTraceRecorder(exporter ?? traceStore, redactor);
 
+  // `modules` is what makes a routed turn run as its module rather than with
+  // every module's tools flattened together.
+  const agent = new Agent({ gateway, sessions, tools, persona, approvals, traces, modules });
+  const workflowRuns = new PostgresWorkflowRunStore(pool);
+
   return {
-    // `modules` is what makes a routed turn run as its module rather than with
-    // every module's tools flattened together.
-    agent: new Agent({ gateway, sessions, tools, persona, approvals, traces, modules }),
+    agent,
     sessions,
     gateway,
     tools,
@@ -468,6 +496,20 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     mcpServer,
     modelKeys,
     memory,
+    workflows,
+    workflowRuns,
+    workflowRunner: new WorkflowRunner({
+      agent,
+      sessions,
+      runs: workflowRuns,
+      workflows,
+      // A function rather than a snapshot: a product registers its modules
+      // after this returns, and a workflow naming one of them must not be
+      // rejected because the set was read too early.
+      agents: () => new Set(modules.list().map((module) => module.id)),
+      approvals,
+      personaId: persona.id,
+    }),
     lifecycle: options.lifecycle ?? new Lifecycle(),
     probes: [databaseProbe(pool)],
     models: modelConfig,
@@ -758,6 +800,34 @@ export {
 } from './agents/agent-config.js';
 export type { AgentConfig, ConnectionGrant } from './agents/agent-config.js';
 export type { DeclaredAgentDependencies } from './agents/declared-agent.js';
+
+export { loadWorkflows } from './workflows/load-workflows.js';
+export {
+  missingAgents,
+  parseWorkflowConfig,
+  WorkflowConfigError,
+  workflowConfigSchema,
+  workflowStepSchema,
+} from './workflows/workflow-config.js';
+export type { WorkflowConfig, WorkflowStep } from './workflows/workflow-config.js';
+export { references, render, TemplateError } from './workflows/template.js';
+export { WorkflowRunner, WorkflowError } from './workflows/workflow-runner.js';
+export type {
+  StartWorkflowInput,
+  WorkflowRunDetail,
+  WorkflowRunnerDependencies,
+} from './workflows/workflow-runner.js';
+export { PostgresWorkflowRunStore } from './workflows/postgres-workflow-run-store.js';
+export { InMemoryWorkflowRunStore } from './workflows/in-memory-workflow-run-store.js';
+export { DEFAULT_RUN_LIMIT, WorkflowRunError } from './workflows/workflow-run-store.js';
+export type {
+  AwaitingKind,
+  RunStatus,
+  StepRun,
+  StepStatus,
+  WorkflowRun,
+  WorkflowRunStore,
+} from './workflows/workflow-run-store.js';
 export { LazyProvider } from './models/lazy-provider.js';
 export { InMemoryModelKeys, ModelKeyError, ModelKeyVault } from './models/model-keys.js';
 export type { ModelKeys, ModelKeyStore } from './models/model-keys.js';

@@ -91,6 +91,16 @@ export interface AgentTurn {
 export interface ResumeInput {
   readonly tenantId: string;
   readonly sessionId: string;
+  /**
+   * The module the paused turn was running as.
+   *
+   * Without it a resumed turn falls back to the agent's own dependencies — so
+   * the held tool call is looked up in the wrong registry, and if it is found
+   * at all the rest of the turn continues with the wrong instructions and the
+   * wrong model tier. A caller that routed the turn knows which module it was;
+   * one that did not, did not need this.
+   */
+  readonly moduleId?: string;
   readonly traceId?: string;
 }
 

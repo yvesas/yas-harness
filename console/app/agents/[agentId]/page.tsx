@@ -86,6 +86,7 @@ export default async function EditAgent({
       ]),
     ].sort();
     const models = Object.keys(api.models.models).sort();
+    const knowledge = api.memory ? await api.memory.listSources(tenant.id) : [];
 
     const granted = (connectorId: string): readonly string[] =>
       agent?.connections.find((grant) => grant.connectorId === connectorId)?.can ?? [];
@@ -277,6 +278,35 @@ export default async function EditAgent({
                   );
                 })
               )}
+
+              {knowledge.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="font-medium">Shared knowledge</div>
+                  <p className="text-muted-foreground text-sm">
+                    Sources this agent may search. Granting none means it searches nothing — it does
+                    not mean everything.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {knowledge.map((source) => (
+                      <label key={source.id} className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="memory"
+                          value={source.slug}
+                          defaultChecked={agent?.memory.includes(source.slug) ?? false}
+                          className="mt-1"
+                        />
+                        <span>
+                          <span className="font-medium">{source.name}</span>
+                          <span className="text-muted-foreground block">
+                            {source.documents} {source.documents === 1 ? 'document' : 'documents'}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <label className="flex items-start gap-2 text-sm">
                 <input

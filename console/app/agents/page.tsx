@@ -91,6 +91,11 @@ export default async function Agents() {
                             </Badge>
                           ))
                         )}
+                        {agent.memory.map((slug) => (
+                          <Badge key={slug} variant="secondary">
+                            knows {slug}
+                          </Badge>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>

@@ -11,6 +11,8 @@
  * Written against `fetch`, like everything else here.
  */
 
+import { trimTrailingSlashes } from '../http/base-url.js';
+
 import { assertDimensions, EmbeddingError, type Embedder } from './embedder.js';
 
 export interface OpenAiCompatibleEmbedderOptions {
@@ -39,7 +41,7 @@ export class OpenAiCompatibleEmbedder implements Embedder {
 
   constructor(options: OpenAiCompatibleEmbedderOptions) {
     this.model = options.model;
-    this.#baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.#baseUrl = trimTrailingSlashes(options.baseUrl);
     const key = options.apiKey ?? (options.apiKeyEnv ? process.env[options.apiKeyEnv] : undefined);
     if (!key) {
       throw new EmbeddingError(

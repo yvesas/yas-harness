@@ -32,6 +32,8 @@
  * `onError`, and the turn carries on.
  */
 
+import { trimTrailingSlashes } from '../http/base-url.js';
+
 import { toOtlpPayload, toSpan, type OtlpSpan, type ResourceOptions } from './otlp.js';
 import type { TraceRecorder, TraceStep } from './trace.js';
 
@@ -75,15 +77,7 @@ const DEFAULTS = {
 const TRACES_PATH = '/v1/traces';
 
 function tracesUrl(endpoint: string): string {
-  // Trimmed by hand rather than with /\/+$/: that pattern backtracks
-  // polynomially on a run of slashes, and an endpoint arrives from
-  // configuration or an environment variable — close enough to input that
-  // paying for a scan is not worth saving a line.
-  let end = endpoint.length;
-  while (end > 0 && endpoint[end - 1] === '/') {
-    end -= 1;
-  }
-  const trimmed = endpoint.slice(0, end);
+  const trimmed = trimTrailingSlashes(endpoint);
   return trimmed.endsWith(TRACES_PATH) ? trimmed : `${trimmed}${TRACES_PATH}`;
 }
 

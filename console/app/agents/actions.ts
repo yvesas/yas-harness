@@ -50,6 +50,7 @@ export async function saveAgentAction(form: FormData): Promise<never> {
       ...(model === '' ? {} : { model }),
       ...(task === '' ? {} : { task }),
       connections,
+      memory: form.getAll('memory').map((value) => String(value)),
       approveWrites: form.get('approveWrites') !== null,
     });
 

@@ -21,6 +21,7 @@ const PAGES = [
   { href: '/connections', label: 'Connections' },
   { href: '/approvals', label: 'Approvals' },
   { href: '/agents', label: 'Agents' },
+  { href: '/memory', label: 'Knowledge' },
   { href: '/playground', label: 'Playground' },
   { href: '/traces', label: 'Traces' },
   { href: '/cost', label: 'Cost' },

@@ -168,6 +168,28 @@ ADR instead.
   `.env`. Found by testing that path before somebody walked it: the container
   kept a stale value across two `up -d` calls, same creation timestamp both
   times. A recreate costs seconds and the script exists so this never happens.
+- **An agent can be declared instead of written, and its tools come from its
+  grants.** A module was TypeScript: to add one you wrote a file, registered it
+  and forked the repository — so the person the console is *for* could not add
+  the one thing that decides what their assistant does. A declared agent needs
+  no code because the tools already exist: the connector contract (ADR 0006)
+  reduced every source to six resource-shaped operations, and an agent's toolset
+  is those operations over the connectors it was granted. Grant `read` on GitHub
+  and it gets `github_read`; grant nothing else and **no other tool exists for
+  it to call** — the boundary is the absence of the tool, not a check inside it.
+  Tools are named **per connector** rather than taking a connector argument,
+  because a single `read_resource` would put the permission boundary in an
+  argument the model chooses; the connection id is still an argument, so it is
+  checked, and a Drive connection handed to a GitHub tool is refused. Three
+  defaults carry the weight: a grant with no `can` is **read-only**, because
+  granting a source should not silently grant changing it; **writes pause for a
+  person** unless somebody wrote `approveWrites: false`, since an agent
+  assembled from a form should not delete things unattended; and a grant naming
+  the same connector twice is **refused** rather than merged, because merging
+  would grant the union and that is the wrong way to resolve an ambiguity about
+  permission. Agents live one-file-per-agent in `config/agents/`, versioned in
+  Git like the rest of `config/` — a diff says which agent changed, and the file
+  name must match the id because both are used to find one.
 - **The central agent delegates to the module the router chose.** Doc 13's
   decision 3 says that under centralised orchestration one thing holds from the
   start: *"o central delega, não microgerencia"*. It did not. `AgentTurn` had no

@@ -18,6 +18,8 @@ import type { ApprovalStore } from './approval/approval-store.js';
 import { CachedConnections } from './connections/cached-connections.js';
 import { ConnectionManager } from './connections/connection-manager.js';
 import { ConnectionOnboarding } from './connections/connection-onboarding.js';
+import { declaredAgent } from './agents/declared-agent.js';
+import { loadAgents } from './agents/load-agents.js';
 import { LazyProvider } from './models/lazy-provider.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
@@ -331,6 +333,10 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     : null;
 
   const connectors = options.connectors ?? new ConnectorRegistry();
+  // Declared agents, from config/agents/. Loaded before the connection layer
+  // is built because the failure worth having early is a malformed file, not a
+  // missing connection — an agent whose source is not connected yet is normal.
+  const declared = await loadAgents(join(configDir, 'agents'));
   const resourceCache = new PostgresResourceCacheStore(pool);
 
   // The manager needs a resolver, which needs the vault; without a vault there
@@ -367,6 +373,16 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // The exporter sits *inside* the redactor: what leaves for a collector is
   // scrubbed by the same pass as what is stored. The other way round would send
   // a third party exactly what the redactor exists to withhold.
+  // A declared agent's tools reach sources through the cache, like everything
+  // else does. Without a connection layer there is nothing for them to reach,
+  // so they are registered only when there is one — a declared agent with no
+  // tools would still be routed to and would answer with nothing.
+  if (cachedConnections) {
+    for (const config of declared) {
+      modules.register(declaredAgent(config, { operations: cachedConnections, connections }));
+    }
+  }
+
   const traceStore = new PostgresTraceRecorder(pool);
   const exporter = otlpExporter(traceStore, options.otlp);
   const traces = new RedactingTraceRecorder(exporter ?? traceStore, redactor);
@@ -658,6 +674,17 @@ export type {
 // made building a request through the published package harder than building
 // one in a test.
 export { cachePrefixLength, responseText, toolCalls, userMessage } from './models/model-gateway.js';
+export { declaredAgent } from './agents/declared-agent.js';
+export { loadAgents } from './agents/load-agents.js';
+export {
+  agentConfigSchema,
+  AgentConfigError,
+  connectionGrantSchema,
+  grantsWrites,
+  parseAgentConfig,
+} from './agents/agent-config.js';
+export type { AgentConfig, ConnectionGrant } from './agents/agent-config.js';
+export type { DeclaredAgentDependencies } from './agents/declared-agent.js';
 export { LazyProvider } from './models/lazy-provider.js';
 export { InMemoryModelKeys, ModelKeyError, ModelKeyVault } from './models/model-keys.js';
 export type { ModelKeys, ModelKeyStore } from './models/model-keys.js';

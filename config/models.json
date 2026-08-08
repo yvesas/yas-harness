@@ -1,7 +1,6 @@
 {
   "requestTimeoutMs": 120000,
   "attemptsPerModel": 2,
-
   "providers": {
     "premium": {
       "kind": "anthropic",
@@ -13,28 +12,43 @@
       "apiKeyEnv": "FAST_MODEL_API_KEY"
     }
   },
-
+  "embedding": {
+    "model": "text-embedding-3-small",
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKeyEnv": "EMBEDDING_MODEL_API_KEY"
+  },
   "models": {
     "premium/reasoning": {
       "provider": "premium",
       "model": "claude-opus-4-8",
       "tier": "premium",
-      "price": { "inputPerMTok": 5, "outputPerMTok": 25, "cachedInputPerMTok": 0.5 }
+      "price": {
+        "inputPerMTok": 5,
+        "outputPerMTok": 25,
+        "cachedInputPerMTok": 0.5
+      }
     },
     "premium/small": {
       "provider": "premium",
       "model": "claude-haiku-4-5",
       "tier": "cheap",
-      "price": { "inputPerMTok": 1, "outputPerMTok": 5, "cachedInputPerMTok": 0.1 }
+      "price": {
+        "inputPerMTok": 1,
+        "outputPerMTok": 5,
+        "cachedInputPerMTok": 0.1
+      }
     },
     "fast/small": {
       "provider": "fast",
       "model": "llama-3.3-70b-versatile",
       "tier": "cheap",
-      "price": { "inputPerMTok": 0.59, "outputPerMTok": 0.79, "cachedInputPerMTok": 0.59 }
+      "price": {
+        "inputPerMTok": 0.59,
+        "outputPerMTok": 0.79,
+        "cachedInputPerMTok": 0.59
+      }
     }
   },
-
   "routes": {
     "routing": ["fast/small", "premium/small"],
     "simple": ["fast/small", "premium/small"],

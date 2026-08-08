@@ -28,6 +28,7 @@ import type { ConnectionStore } from '../connections/connection-store.js';
 import type { ConnectorCapability, Resource } from '../connections/connector.js';
 import { ToolRegistry, ok, failed } from '../core/tool.js';
 import type { ToolDefinition } from '../core/tool.js';
+import type { MemoryStore } from '../memory/memory-store.js';
 import type { ModuleDefinition } from '../modules/module.js';
 
 import { grantsWrites, type AgentConfig, type ConnectionGrant } from './agent-config.js';
@@ -36,6 +37,8 @@ export interface DeclaredAgentDependencies {
   readonly operations: ConnectionOperations;
   /** So an agent can find out which connections it actually has. */
   readonly connections: ConnectionStore;
+  /** Shared knowledge, when this deployment has any. */
+  readonly memory?: MemoryStore;
 }
 
 /** Everything a listing hands a model — never a whole document. */
@@ -68,6 +71,10 @@ export function declaredAgent(
         tools.register(tool);
       }
     }
+  }
+
+  if (config.memory.length > 0 && dependencies.memory) {
+    tools.register(memoryTool(config, dependencies.memory));
   }
 
   return {
@@ -120,6 +127,56 @@ function connectionsTool(
       );
     },
   };
+}
+
+/**
+ * Searching the knowledge this agent was granted.
+ *
+ * Slugs are resolved to ids **at call time**, not at startup: a grant may name
+ * a source somebody is about to create, and a source may be deleted and made
+ * again. Resolving late costs one small query and means a grant never goes
+ * stale.
+ *
+ * A slug that resolves to nothing is simply not searched. The alternative —
+ * failing the call — would turn somebody's typo in a config file into an agent
+ * that cannot answer anything.
+ */
+function memoryTool(config: AgentConfig, memory: MemoryStore): ToolDefinition<never> {
+  const granted = config.memory;
+
+  const tool: ToolDefinition<{ query: string }> = {
+    name: 'memory_search',
+    description:
+      'Search the shared knowledge this agent may read. Use it before answering anything ' +
+      'that might be written down. Returns passages, each with the document it came from.',
+    input: z.object({ query: z.string().min(1) }),
+    execute: async (input, context) => {
+      const sources = await Promise.all(
+        granted.map((slug) => memory.findSourceBySlug(context.tenantId, slug)),
+      );
+      const ids = sources.filter((source) => source !== null).map((source) => source.id);
+      if (ids.length === 0) {
+        return ok('No knowledge sources are available to this agent yet.');
+      }
+
+      const hits = await memory.search(context.tenantId, { sourceIds: ids, text: input.query });
+      if (hits.length === 0) {
+        // Said plainly, because the failure to avoid is a model treating "I
+        // found nothing" as licence to invent.
+        return ok('Nothing in the shared knowledge matched that. Say so rather than guessing.');
+      }
+
+      return ok(
+        hits
+          .map(
+            (hit) =>
+              `--- ${hit.title}${hit.url ? ` (${hit.url})` : ''} [${hit.sourceSlug}]\n${hit.text}`,
+          )
+          .join('\n\n'),
+      );
+    },
+  };
+  return tool as unknown as ToolDefinition<never>;
 }
 
 /** The argument every generated tool takes, checked against the grant at run time. */

@@ -84,6 +84,18 @@ export const agentConfigSchema = z.object({
   /** Which sources it may reach, and what it may do there. */
   connections: z.array(connectionGrantSchema).default([]),
   /**
+   * Which memory sources it may search, by slug.
+   *
+   * Slugs rather than ids, because this file is in Git and an id is a uuid
+   * created at runtime. A slug that names no source is not an error at startup:
+   * a grant can legitimately precede the source somebody is about to create,
+   * and failing on it would make the order of two edits matter.
+   *
+   * Empty means it searches nothing. It does **not** mean everything — an empty
+   * grant that read the whole corpus would be the opposite of what it says.
+   */
+  memory: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).default([]),
+  /**
    * Whether a write it performs pauses for a person.
    *
    * Defaults to **true**, and the default is the point: an agent assembled from

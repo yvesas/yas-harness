@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { RegexSecretRedactor } from '../../src/redaction/regex-secret-redactor.js';
 import { RedactingTraceRecorder } from '../../src/telemetry/redacting-trace-recorder.js';
-import type { TraceRecorder, TraceStep } from '../../src/telemetry/trace.js';
+import type { TraceRecorder, RecordedStep } from '../../src/telemetry/trace.js';
 import { InMemoryTraceRecorder, TurnTrace } from '../../src/telemetry/trace.js';
 
 const CONTEXT = { tenantId: 'tenant-1', sessionId: 'session-1' };
@@ -112,14 +112,14 @@ describe('InMemoryTraceRecorder as a reader', () => {
 });
 
 describe('RedactingTraceRecorder', () => {
-  function capture(): { inner: TraceRecorder; steps: TraceStep[] } {
-    const steps: TraceStep[] = [];
+  function capture(): { inner: TraceRecorder; steps: RecordedStep[] } {
+    const steps: RecordedStep[] = [];
     return {
       steps,
       inner: {
         record: (step) => {
           steps.push(step);
-          return Promise.resolve();
+          return Promise.resolve(steps.length - 1);
         },
       },
     };
@@ -133,7 +133,6 @@ describe('RedactingTraceRecorder', () => {
       tenantId: 't',
       sessionId: 's',
       traceId: 'trace',
-      sequence: 0,
       kind: 'tool_call',
       label: 'fetch',
       succeeded: true,
@@ -153,7 +152,6 @@ describe('RedactingTraceRecorder', () => {
       tenantId: 't',
       sessionId: 's',
       traceId: 'trace',
-      sequence: 0,
       kind: 'model_call',
       // A label is a name the harness chose — a model, a tool, a module.
       label: 'anthropic/opus',

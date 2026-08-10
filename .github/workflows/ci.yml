@@ -104,6 +104,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Create config/models.json
+        # A deployment's own file, not in Git -- so a clean checkout has only
+        # the example. This is what start.sh does on a real machine, and doing
+        # it here means CI runs on the same config a first-time user gets.
+        run: cp config/models.example.json config/models.json
+
       # A migration that cannot be rolled back is a migration we cannot ship.
       - name: Apply
         run: node scripts/migrate.mjs up

@@ -51,6 +51,11 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
       limit: 1,
     });
     const overMcp = approval.toolCallId.startsWith('mcp:');
+    // A workflow's step gate goes into this same queue on purpose — one inbox
+    // rather than two, because the second inbox is the one nobody watches. It
+    // needs its own rendering, though: what is being approved is a prompt, and
+    // a prompt inside escaped JSON is the one thing a reviewer cannot read.
+    const step = asWorkflowStep(approval.toolName, approval.input);
 
     return (
       <>
@@ -63,10 +68,30 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
           {overMcp ? ' · arrived over MCP' : ''}
         </p>
 
-        <h2 className="mt-8 text-lg font-semibold tracking-tight">It would run with</h2>
-        <pre className="bg-muted overflow-x-auto rounded-md p-3 text-sm">
-          {JSON.stringify(approval.input, null, 2)}
-        </pre>
+        {step ? (
+          <>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">
+              This would be sent to <code>{step.agent}</code>
+            </h2>
+            <pre className="bg-muted overflow-x-auto rounded-md p-3 text-sm whitespace-pre-wrap">
+              {step.prompt}
+            </pre>
+            <p className="text-muted-foreground text-sm">
+              Nothing has been sent to a model for this step yet. Approving lets it run; the run
+              then carries on to whatever follows.
+            </p>
+            <p>
+              <a href={`/workflows/runs/${step.runId}`}>Open the run this belongs to</a>
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="mt-8 text-lg font-semibold tracking-tight">It would run with</h2>
+            <pre className="bg-muted overflow-x-auto rounded-md p-3 text-sm">
+              {JSON.stringify(approval.input, null, 2)}
+            </pre>
+          </>
+        )}
         {overMcp ? (
           <p className="text-muted-foreground text-sm">
             Approving covers <strong>these arguments</strong>, not this tool. A client sending
@@ -79,7 +104,7 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
           <p>
             <a href={`/traces/${turns[0].traceId}`}>Open the turn that led here</a>
           </p>
-        ) : (
+        ) : step ? null : (
           <p className="text-muted-foreground text-sm">No trace recorded for this conversation.</p>
         )}
 
@@ -129,4 +154,25 @@ export default async function Review({ params }: { params: Promise<{ approvalId:
   } catch (error) {
     return <Failure error={error} />;
   }
+}
+
+/**
+ * A workflow step gate, when that is what this is.
+ *
+ * Read defensively rather than cast: the input column is jsonb written by the
+ * harness, and a page that trusted its shape would crash on a row written by an
+ * older version of it.
+ */
+function asWorkflowStep(
+  toolName: string,
+  input: unknown,
+): { readonly runId: string; readonly agent: string; readonly prompt: string } | null {
+  if (!toolName.startsWith('workflow.') || typeof input !== 'object' || input === null) {
+    return null;
+  }
+  const { runId, agent, prompt } = input as Record<string, unknown>;
+  if (typeof runId !== 'string' || typeof agent !== 'string' || typeof prompt !== 'string') {
+    return null;
+  }
+  return { runId, agent, prompt };
 }

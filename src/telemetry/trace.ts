@@ -68,8 +68,24 @@ export interface TraceStep {
  * that cannot write should fail, and the caller above it should carry on.
  */
 export interface TraceRecorder {
-  record(step: TraceStep): Promise<void>;
+  /**
+   * Write one step. **The recorder assigns its position**, not the caller.
+   *
+   * It has to, because more than one writer contributes to a single trace: the
+   * router opens one and the agent continues it, each with its own idea of
+   * where it is. Two writers counting from zero collide on the first step, and
+   * the loser is dropped — which is how every routed turn quietly lost its
+   * `input` step while the trace still looked plausible.
+   *
+   * Returns where the step landed, because a decorator may need it: the OTLP
+   * exporter builds a span id from the position, and inventing its own would
+   * make the exported trace disagree with the stored one.
+   */
+  record(step: RecordedStep): Promise<number>;
 }
+
+/** A step as its writer knows it: everything but where it lands. */
+export type RecordedStep = Omit<TraceStep, 'sequence'>;
 
 /** One turn, as a list of turns shows it. */
 export interface TraceSummary {
@@ -117,12 +133,17 @@ export class InMemoryTraceRecorder implements TraceRecorder, TraceReader {
   /** When each turn was first seen — the table has `created_at`; memory needs one. */
   readonly #startedAt = new Map<string, Date>();
 
-  record(step: TraceStep): Promise<void> {
-    this.steps.push(step);
+  record(step: RecordedStep): Promise<number> {
+    // Counted here for the same reason the database counts: whoever writes
+    // next continues the trace rather than starting it again.
+    const sequence = this.steps.filter(
+      (one) => one.tenantId === step.tenantId && one.traceId === step.traceId,
+    ).length;
+    this.steps.push({ ...step, sequence });
     if (!this.#startedAt.has(step.traceId)) {
       this.#startedAt.set(step.traceId, new Date());
     }
-    return Promise.resolve();
+    return Promise.resolve(sequence);
   }
 
   /** One turn's steps, in order. */
@@ -180,16 +201,16 @@ export interface TurnTraceContext {
  * One turn's trace: numbers the steps and keeps a tracing failure away from the
  * caller.
  *
- * Numbering lives here rather than in each caller because a gap or a repeat in
- * the sequence is what makes a trace unreadable, and the caller has a turn to
- * run. A missing recorder makes every step a no-op, so the callers need no
- * branch of their own — tracing is off until a product wires it.
+ * It no longer numbers the steps: the recorder does. This class used to count
+ * from zero, which is correct for a trace it started and wrong for one it
+ * joined — and joining is the normal case, since the router opens the trace and
+ * the agent continues it. A missing recorder makes every step a no-op, so the
+ * callers need no branch of their own — tracing is off until a product wires it.
  */
 export class TurnTrace {
   readonly #recorder: TraceRecorder | undefined;
   readonly #context: TurnTraceContext;
   readonly #traceId: string;
-  #sequence = 0;
 
   constructor(recorder: TraceRecorder | undefined, context: TurnTraceContext) {
     this.#recorder = recorder;
@@ -206,15 +227,11 @@ export class TurnTrace {
       return;
     }
 
-    const sequence = this.#sequence;
-    this.#sequence += 1;
-
     try {
       await this.#recorder.record({
         tenantId: this.#context.tenantId,
         sessionId: this.#context.sessionId,
         traceId: this.#traceId,
-        sequence,
         ...step,
       });
     } catch (error) {

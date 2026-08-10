@@ -312,7 +312,9 @@ describe('OTLP export', () => {
       onError: (error) => errors.push(error),
     });
 
-    await expect(recorder.record(step())).resolves.toBeUndefined();
+    // It answers with where the step landed, and does not throw: a collector
+    // refusing a batch must not cost the turn.
+    await expect(recorder.record(step())).resolves.toBe(0);
     await expect(recorder.flush()).resolves.toBeUndefined();
     expect(errors[0]?.message).toMatch(/503/);
   });

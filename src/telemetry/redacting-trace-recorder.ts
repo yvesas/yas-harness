@@ -12,7 +12,7 @@
 
 import { redactDeep, type SecretRedactor } from '../redaction/secret-redactor.js';
 
-import type { TraceRecorder, TraceStep } from './trace.js';
+import type { RecordedStep, TraceRecorder } from './trace.js';
 
 export class RedactingTraceRecorder implements TraceRecorder {
   readonly #inner: TraceRecorder;
@@ -23,7 +23,7 @@ export class RedactingTraceRecorder implements TraceRecorder {
     this.#redactor = redactor;
   }
 
-  record(step: TraceStep): Promise<void> {
+  record(step: RecordedStep): Promise<number> {
     return this.#inner.record({
       ...step,
       ...(step.detail === undefined

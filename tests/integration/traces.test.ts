@@ -14,7 +14,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { PostgresTraceRecorder } from '../../src/telemetry/postgres-trace-recorder.js';
-import type { TraceStep } from '../../src/telemetry/trace.js';
+import type { RecordedStep, TraceStep } from '../../src/telemetry/trace.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
 
@@ -26,6 +26,7 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
   let sessionA: string;
 
   const TRACE = '55555555-5555-4555-8555-555555555555';
+  const JOINED = '66666666-6666-4666-8666-666666666666';
 
   beforeAll(() => {
     pool = new pg.Pool({ connectionString: DATABASE_URL });
@@ -44,12 +45,11 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
     sessionA = await createSession(pool, tenantA);
   });
 
-  function step(overrides: Partial<TraceStep> = {}): TraceStep {
+  function step(overrides: Partial<RecordedStep> = {}): RecordedStep {
     return {
       tenantId: tenantA,
       sessionId: sessionA,
       traceId: TRACE,
-      sequence: 0,
       kind: 'input',
       succeeded: true,
       ...overrides,
@@ -81,13 +81,14 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
     ]);
   });
 
-  it('returns a turn in sequence order, however it was written', async () => {
-    await recorder.record(step({ sequence: 2, kind: 'reply' }));
-    await recorder.record(step({ sequence: 0, kind: 'input' }));
-    await recorder.record(step({ sequence: 1, kind: 'model_call' }));
+  it('numbers a turn in the order it was written, and says where each landed', async () => {
+    // The position is the recorder's to assign — created_at cannot sort these,
+    // since steps written in one transaction share a timestamp.
+    const first = await recorder.record(step({ kind: 'input' }));
+    const second = await recorder.record(step({ kind: 'model_call' }));
+    const third = await recorder.record(step({ kind: 'reply' }));
 
-    // Written out of order on purpose: created_at cannot sort these — steps
-    // written in one transaction share a timestamp.
+    expect([first, second, third]).toEqual([0, 1, 2]);
     expect((await recorder.trace(tenantA, TRACE)).map((entry) => entry.kind)).toEqual([
       'input',
       'model_call',
@@ -95,14 +96,15 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
     ]);
   });
 
-  it('refuses two steps at the same position in a turn', async () => {
-    await recorder.record(step({ sequence: 0 }));
+  it('cannot be made to put two steps in one position', async () => {
+    // The unique constraint still guards the table, but nothing a caller does
+    // can trip it any more: writing the same step twice makes two positions,
+    // which is the honest record of two writes.
+    await recorder.record(step({ kind: 'input' }));
+    await recorder.record(step({ kind: 'input' }));
 
-    // A repeated sequence would make a trace silently misread, so it is a
-    // write that fails rather than a row that lands.
-    await expect(recorder.record(step({ sequence: 0, kind: 'reply' }))).rejects.toThrow(
-      /traces_step_unique/,
-    );
+    const steps = await recorder.trace(tenantA, TRACE);
+    expect(steps.map((one) => one.sequence)).toEqual([0, 1]);
   });
 
   it('refuses a kind the agent could not have produced', async () => {
@@ -162,11 +164,11 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
 
   it('summarises recent turns, newest first, one row per turn', async () => {
     const older = '77777777-7777-4777-8777-777777777777';
-    await recorder.record(step({ traceId: older, sequence: 0, kind: 'input' }));
-    await recorder.record(step({ traceId: older, sequence: 1, kind: 'reply', label: 'end_turn' }));
-    await recorder.record(step({ sequence: 0, kind: 'input' }));
-    await recorder.record(step({ sequence: 1, kind: 'tool_call', succeeded: false }));
-    await recorder.record(step({ sequence: 2, kind: 'reply', label: 'iteration_limit' }));
+    await recorder.record(step({ traceId: older, kind: 'input' }));
+    await recorder.record(step({ traceId: older, kind: 'reply', label: 'end_turn' }));
+    await recorder.record(step({ kind: 'input' }));
+    await recorder.record(step({ kind: 'tool_call', succeeded: false }));
+    await recorder.record(step({ kind: 'reply', label: 'iteration_limit' }));
 
     const recent = await recorder.recent(tenantA);
 
@@ -183,9 +185,9 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
 
   it('narrows recent turns to one conversation, and respects a limit', async () => {
     const other = await createSession(pool, tenantA);
-    await recorder.record(step({ sequence: 0 }));
+    await recorder.record(step());
     await recorder.record(
-      step({ traceId: '88888888-8888-4888-8888-888888888888', sessionId: other, sequence: 0 }),
+      step({ traceId: '88888888-8888-4888-8888-888888888888', sessionId: other }),
     );
 
     expect(await recorder.recent(tenantA, { sessionId: other })).toHaveLength(1);
@@ -193,8 +195,8 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
   });
 
   it('hides another tenant’s turns from the list', async () => {
-    await recorder.record(step({ sequence: 0 }));
-    await recorder.record(step({ tenantId: tenantB, sessionId: null, sequence: 0 }));
+    await recorder.record(step());
+    await recorder.record(step({ tenantId: tenantB, sessionId: null }));
 
     expect(await recorder.recent(tenantB)).toHaveLength(1);
     expect((await recorder.recent(tenantB))[0]?.sessionId).toBeNull();
@@ -210,6 +212,24 @@ describe.skipIf(!DATABASE_URL)('PostgresTraceRecorder', () => {
       [tenantA],
     );
     expect(rows[0]?.count).toBe('0');
+  });
+
+  it('continues one trace across two writers instead of colliding', async () => {
+    // The router opens a trace and the agent continues it — which is what
+    // `AgentTurn.traceId` is for. Both used to count from zero, so the agent's
+    // first step lost a unique-constraint race and was dropped: every routed
+    // turn was silently missing its `input` while the trace still read as
+    // though nothing were absent.
+    const base = { tenantId: tenantA, sessionId: sessionA, traceId: JOINED, succeeded: true };
+
+    await recorder.record({ ...base, kind: 'route', label: 'notes' });
+    await recorder.record({ ...base, kind: 'input' });
+    await recorder.record({ ...base, kind: 'model_call', label: 'a-model' });
+
+    const steps = await recorder.trace(tenantA, JOINED);
+
+    expect(steps.map((one) => one.kind)).toEqual(['route', 'input', 'model_call']);
+    expect(steps.map((one) => one.sequence)).toEqual([0, 1, 2]);
   });
 });
 

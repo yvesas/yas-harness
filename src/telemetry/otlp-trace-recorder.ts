@@ -35,7 +35,7 @@
 import { trimTrailingSlashes } from '../http/base-url.js';
 
 import { toOtlpPayload, toSpan, type OtlpSpan, type ResourceOptions } from './otlp.js';
-import type { TraceRecorder, TraceStep } from './trace.js';
+import type { RecordedStep, TraceRecorder } from './trace.js';
 
 export interface OtlpExportOptions extends ResourceOptions {
   /**
@@ -95,11 +95,41 @@ export class OtlpTraceRecorder implements TraceRecorder {
     this.#url = tracesUrl(options.endpoint);
   }
 
-  async record(step: TraceStep): Promise<void> {
-    // Queue before storing: a database that is refusing writes should not also
-    // cost the export, and `inner` rejecting is still the caller's to see.
-    this.#enqueue(toSpan(step));
-    await this.#inner?.record(step);
+  readonly #counts = new Map<string, number>();
+
+  async record(step: RecordedStep): Promise<number> {
+    // Stored first, because the store is what decides where the step landed and
+    // a span id is built from that. Exporting a position we invented would make
+    // the exported trace disagree with the one an operator reads back.
+    //
+    // With no inner store there is nothing to ask, so the count is kept here.
+    // Export-only is the one case where this recorder is the sole writer, so
+    // counting alone is safe exactly when it is the only option.
+    let sequence: number | undefined;
+    let failure: Error | undefined;
+    if (this.#inner) {
+      try {
+        sequence = await this.#inner.record(step);
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    // A store that refused says nothing about the collector, and the collector
+    // may be the one destination still working. So the span goes out either
+    // way, numbered from here when the store could not say.
+    if (sequence === undefined) {
+      sequence = this.#counts.get(step.traceId) ?? 0;
+      this.#counts.set(step.traceId, sequence + 1);
+    }
+    this.#enqueue(toSpan({ ...step, sequence }));
+
+    // Raised after the export, and still raised: the store failing is the
+    // caller's to see, whatever the collector did.
+    if (failure !== undefined) {
+      throw failure;
+    }
+    return sequence;
   }
 
   /**

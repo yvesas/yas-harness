@@ -13,6 +13,7 @@ import type { Pool } from 'pg';
 
 import type {
   RecentTracesQuery,
+  RecordedStep,
   TraceReader,
   TraceRecorder,
   TraceStep,
@@ -24,17 +25,26 @@ const DEFAULT_RECENT_LIMIT = 20;
 export class PostgresTraceRecorder implements TraceRecorder, TraceReader {
   constructor(private readonly pool: Pool) {}
 
-  async record(step: TraceStep): Promise<void> {
-    await this.pool.query(
+  async record(step: RecordedStep): Promise<number> {
+    const { rows } = await this.pool.query<{ sequence: number }>(
+      // The position is computed here rather than sent, because more than one
+      // writer contributes to a trace -- the router opens it, the agent
+      // continues it -- and each of them counting from zero collides on the
+      // first step. The database is the only place that can see both.
       `INSERT INTO traces (
          tenant_id, session_id, trace_id, sequence, kind,
          label, duration_ms, succeeded, detail, error_message
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       ) VALUES (
+         $1, $2, $3,
+         (SELECT coalesce(max(sequence), -1) + 1
+            FROM traces WHERE tenant_id = $1 AND trace_id = $3),
+         $4, $5, $6, $7, $8, $9
+       )
+       RETURNING sequence`,
       [
         step.tenantId,
         step.sessionId,
         step.traceId,
-        step.sequence,
         step.kind,
         step.label ?? null,
         step.durationMs ?? null,
@@ -43,6 +53,7 @@ export class PostgresTraceRecorder implements TraceRecorder, TraceReader {
         step.errorMessage ?? null,
       ],
     );
+    return rows[0]!.sequence;
   }
 
   /** One turn's steps, in order — the query a trace exists for. */

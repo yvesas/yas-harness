@@ -49,9 +49,11 @@ export async function saveKey(form: FormData): Promise<never> {
         event: 'model_key.store_failed',
         provider,
         tenantId: tenant.id,
-        // Says whether the form arrived empty, which is a different problem
-        // from the vault refusing — and indistinguishable from the outside.
-        keyLength: apiKey.length,
+        // The message already separates the two failures worth telling apart:
+        // a form that arrived empty says "no key was entered", and the vault
+        // refusing says something else. Nothing derived from the key itself
+        // goes in here, not even its length — a log line is the last place a
+        // secret should be able to reach by accident.
         message,
       }),
     );

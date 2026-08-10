@@ -303,7 +303,18 @@ export class RoutedGateway implements ModelGateway {
       return new Set();
     }
     try {
-      return new Set(await this.#modelKeys.providers(tenantId));
+      const brought = await this.#modelKeys.providers(tenantId);
+      // Every name except the embedding provider's, which is not a completion
+      // provider at all: it pays for shared knowledge, and counting it here
+      // would filter every completion candidate away, so a tenant who paid
+      // only for knowledge could run no turn.
+      //
+      // Narrow on purpose. A key for a name this gateway does not route to is
+      // otherwise still counted, and still fails loudly — a misspelt provider
+      // is a tenant who thinks they are on their own key and is not, which is
+      // precisely what this rule exists to catch.
+      const embedding = this.#config.embedding?.provider;
+      return new Set(brought.filter((provider) => provider !== embedding));
     } catch (error) {
       throw new ModelGatewayError(
         `could not read the model keys for tenant "${tenantId}"`,

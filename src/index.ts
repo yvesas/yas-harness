@@ -28,8 +28,7 @@ import type { WorkflowRunStore } from './workflows/workflow-run-store.js';
 import { LazyProvider } from './models/lazy-provider.js';
 import type { MemoryStore } from './memory/memory-store.js';
 import { PostgresMemoryStore } from './memory/postgres-memory-store.js';
-import { OpenAiCompatibleEmbedder } from './memory/openai-compatible-embedder.js';
-import { LazyEmbedder } from './memory/lazy-embedder.js';
+import { KeyedEmbedderFactory } from './memory/keyed-embedder-factory.js';
 import type { ConnectionStore } from './connections/connection-store.js';
 import { ConnectorRegistry } from './connections/connector-registry.js';
 import type { CredentialResolver } from './connections/credential-resolver.js';
@@ -73,7 +72,7 @@ import { Router } from './router/router.js';
 import { PostgresTraceRecorder } from './telemetry/postgres-trace-recorder.js';
 import { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 import { databaseProbe, type HealthProbe } from './lifecycle/health.js';
-import { ModelKeyVault } from './models/model-keys.js';
+import { ModelKeyVault, type ModelKeys } from './models/model-keys.js';
 import { PostgresModelKeyStore } from './models/postgres-model-keys.js';
 import { Lifecycle } from './lifecycle/shutdown.js';
 import { OtlpTraceRecorder, type OtlpExportOptions } from './telemetry/otlp-trace-recorder.js';
@@ -296,25 +295,24 @@ function routedProvidersFor(modelConfig: Awaited<ReturnType<typeof loadModelConf
 function memoryStoreFor(
   pool: pg.Pool,
   modelConfig: Awaited<ReturnType<typeof loadModelConfig>>,
+  modelKeys: ModelKeys | undefined,
 ): MemoryStore | null {
   const entry = modelConfig.embedding;
   if (!entry) {
     return null;
   }
-  // Lazily, for the reason `LazyProvider` exists: an embedder reads its key in
-  // its constructor, and a deployment that declared one without setting the key
-  // should still be able to list what it already knows.
+  // The factory is what makes the key the tenant's rather than the
+  // deployment's: a tenant who pasted one on the Keys page has their documents
+  // embedded on their own account, and a deployment that configured no key at
+  // all is a valid deployment rather than a broken one.
+  //
+  // Nothing here reads a key. That is the reason `LazyProvider` exists, applied
+  // once more: a harness with no embedding key anywhere still starts, and still
+  // lists what it already knows -- only embedding needs the key, and that is
+  // where the error appears.
   return new PostgresMemoryStore(
     pool,
-    new LazyEmbedder(
-      entry.model,
-      () =>
-        new OpenAiCompatibleEmbedder({
-          model: entry.model,
-          baseUrl: entry.baseUrl,
-          apiKeyEnv: entry.apiKeyEnv,
-        }),
-    ),
+    new KeyedEmbedderFactory({ entry, ...(modelKeys ? { modelKeys } : {}) }),
   );
 }
 
@@ -364,7 +362,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   // Shared knowledge, when an embedding provider was configured. Absent, the
   // memory tool is simply never generated -- an agent granted a source it
   // cannot search would be worse than one that was never granted it.
-  const memory = memoryStoreFor(pool, modelConfig);
+  const memory = memoryStoreFor(pool, modelConfig, modelKeys ?? undefined);
 
   const compressionProfile = options.compressionProfile ?? 'none';
   // A supplied gateway replaces the routed one outright — including the
@@ -775,6 +773,10 @@ export { cachePrefixLength, responseText, toolCalls, userMessage } from './model
 export { PostgresMemoryStore } from './memory/postgres-memory-store.js';
 export { OpenAiCompatibleEmbedder } from './memory/openai-compatible-embedder.js';
 export { LazyEmbedder } from './memory/lazy-embedder.js';
+export { KeyedEmbedderFactory } from './memory/keyed-embedder-factory.js';
+export type { KeyedEmbedderOptions } from './memory/keyed-embedder-factory.js';
+export { fixedEmbedder } from './memory/embedder.js';
+export type { EmbedderFactory } from './memory/embedder.js';
 export { chunk } from './memory/chunking.js';
 export { assertDimensions, EMBEDDING_DIMENSIONS, EmbeddingError } from './memory/embedder.js';
 export type { Embedder } from './memory/embedder.js';

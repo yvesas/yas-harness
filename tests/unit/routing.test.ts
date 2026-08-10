@@ -178,3 +178,54 @@ describe('model configuration', () => {
     expect(parsed.providers['the-fast-one']?.baseUrl).toBe('https://api.example.test/v1');
   });
 });
+
+describe('the embedding provider’s name', () => {
+  const base = {
+    providers: {
+      groq: { kind: 'openai-compatible', baseUrl: 'https://x.test/v1', apiKeyEnv: 'K' },
+    },
+    models: {
+      cheap: {
+        provider: 'groq',
+        model: 'llama',
+        tier: 'cheap',
+        price: { inputPerMTok: 1, outputPerMTok: 2, cachedInputPerMTok: 0.5 },
+      },
+      good: {
+        provider: 'groq',
+        model: 'big',
+        tier: 'premium',
+        price: { inputPerMTok: 10, outputPerMTok: 20, cachedInputPerMTok: 1 },
+      },
+    },
+    routes: { routing: ['cheap'], simple: ['cheap'], reasoning: ['good'], sensitive: ['good'] },
+  };
+
+  it('defaults to "embedding" and needs no key variable', () => {
+    // No apiKeyEnv: a deployment where every tenant brings their own has no
+    // platform key to name, and demanding one would put a secret in the
+    // environment purely to satisfy a schema.
+    const config = parseModelConfig(
+      { ...base, embedding: { model: 'embed-small', baseUrl: 'https://x.test/v1' } },
+      'test',
+    );
+
+    expect(config.embedding?.provider).toBe('embedding');
+    expect(config.embedding?.apiKeyEnv).toBeUndefined();
+  });
+
+  it('may not be the name of a completion provider', () => {
+    // Sharing a name would make an embedding key look to the router like a
+    // completion key, so a tenant who paid only for knowledge would have their
+    // turns routed as though they had brought a completion key.
+    expect(() =>
+      parseModelConfig(
+        {
+          ...base,
+          embedding: { model: 'embed-small', baseUrl: 'https://x.test/v1', provider: 'groq' },
+        },
+        'test',
+      ),
+    ).toThrow(/its key is a different key/);
+  });
+});

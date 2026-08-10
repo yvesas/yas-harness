@@ -282,9 +282,23 @@ export class RoutedGateway implements ModelGateway {
     apiKey: string | null,
   ): Promise<ModelResponse> {
     const provider = this.#providers.get(candidate.provider)!;
+    // The model's own ceiling wins over the caller's, because it is the one
+    // that knows what the provider will accept. A caller asking for more than
+    // this model can be asked for gets a 413 instead of an answer, and no
+    // caller is in a position to know that.
+    const capped =
+      candidate.maxOutputTokens === undefined
+        ? request
+        : {
+            ...request,
+            maxOutputTokens: Math.min(
+              candidate.maxOutputTokens,
+              request.maxOutputTokens ?? candidate.maxOutputTokens,
+            ),
+          };
     return provider.invoke({
       model: candidate.model,
-      request,
+      request: capped,
       ...(apiKey === null ? {} : { apiKey }),
       signal: AbortSignal.timeout(this.#config.requestTimeoutMs),
     });

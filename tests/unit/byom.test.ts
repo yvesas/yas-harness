@@ -65,6 +65,10 @@ const config = parseModelConfig(
       reasoning: ['good'],
       sensitive: ['good'],
     },
+    // Declared so the tests below can tell a key that pays for turns from one
+    // that pays for shared knowledge. Its provider name defaults to
+    // "embedding".
+    embedding: { model: 'embed-small', baseUrl: 'https://api.example.test/v1' },
     attemptsPerModel: 1,
   },
   'test',
@@ -374,5 +378,26 @@ describe('model keys are sealed like every other secret', () => {
     expect(await vault.providers(TENANT)).toEqual([]);
     // And with the key gone, they are back on the platform's.
     expect(await vault.resolve(TENANT, 'groq')).toBeNull();
+  });
+});
+
+describe('a key for something this gateway does not route to', () => {
+  it('is not counted as bringing a key', async () => {
+    // The embedding key is filed under its own provider name, because it pays
+    // for shared knowledge rather than for turns. Counting it here would
+    // filter every completion candidate away, and a tenant who paid only for
+    // knowledge would find that no turn could run at all.
+    const { gateway, groq } = build({
+      providers: () => Promise.resolve(['embedding']),
+      resolve: () => Promise.resolve(null),
+    });
+
+    const response = await gateway.complete(request());
+
+    expect(response.content).toEqual([{ type: 'text', text: 'hello' }]);
+    // On the platform key, as a tenant who brought no *completion* key should
+    // be — and the provider was reached at all, which is the point.
+    expect(groq.calls).toHaveLength(1);
+    expect(groq.calls[0]?.apiKey).toBeUndefined();
   });
 });

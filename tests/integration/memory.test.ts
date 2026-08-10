@@ -18,7 +18,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { EMBEDDING_DIMENSIONS, type Embedder } from '../../src/memory/embedder.js';
+import { EMBEDDING_DIMENSIONS, fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
 import { PostgresMemoryStore } from '../../src/memory/postgres-memory-store.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
@@ -67,7 +67,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
     tenantA = await createTenant(pool, 'mem-a');
     tenantB = await createTenant(pool, 'mem-b');
     embedder = new StubEmbedder();
-    store = new PostgresMemoryStore(pool, embedder);
+    store = new PostgresMemoryStore(pool, fixedEmbedder(embedder));
   });
 
   async function seed(tenantId: string, slug = 'wiki') {

@@ -31,6 +31,34 @@ export interface Embedder {
   embed(texts: readonly string[]): Promise<number[][]>;
 }
 
+/**
+ * Port: which embedder to use for a given tenant.
+ *
+ * The layer that exists because a key is not the deployment's to own. A tenant
+ * that pasted their own embedding key into the console has their documents
+ * embedded on their account; one that pasted none uses the platform's, if the
+ * deployment configured one at all. `Embedder` stays what it says it is — text
+ * in, vectors out — and the question of *whose* key is asked here.
+ *
+ * Asked on every ingest and every search rather than resolved once and cached,
+ * for the same reason the credential vault unseals per call: a key revoked a
+ * minute ago should not still be in use, and a decrypted key held in a field is
+ * a decrypted key in a heap dump.
+ */
+export interface EmbedderFactory {
+  for(tenantId: string): Promise<Embedder>;
+}
+
+/**
+ * One embedder for everybody — the deployment's own.
+ *
+ * For tests, and for a product that has no per-tenant keys and does not want
+ * the machinery.
+ */
+export function fixedEmbedder(embedder: Embedder): EmbedderFactory {
+  return { for: () => Promise.resolve(embedder) };
+}
+
 export class EmbeddingError extends Error {
   constructor(
     message: string,

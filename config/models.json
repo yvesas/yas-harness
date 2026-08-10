@@ -15,6 +15,7 @@
   "embedding": {
     "model": "text-embedding-3-small",
     "baseUrl": "https://api.openai.com/v1",
+    "provider": "embedding",
     "apiKeyEnv": "EMBEDDING_MODEL_API_KEY"
   },
   "models": {

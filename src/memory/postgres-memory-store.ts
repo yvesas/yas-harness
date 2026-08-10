@@ -18,7 +18,7 @@ import type { Pool, PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 
 import { chunk, type ChunkOptions } from './chunking.js';
-import { assertDimensions, type Embedder } from './embedder.js';
+import { assertDimensions, type EmbedderFactory } from './embedder.js';
 import {
   DEFAULT_MAX_DISTANCE,
   DEFAULT_SEARCH_LIMIT,
@@ -62,12 +62,16 @@ function toVector(values: readonly number[]): string {
 
 export class PostgresMemoryStore implements MemoryStore {
   readonly #pool: Pool;
-  readonly #embedder: Embedder;
+  readonly #embedders: EmbedderFactory;
   readonly #chunking: ChunkOptions;
 
-  constructor(pool: Pool, embedder: Embedder, chunking: ChunkOptions = {}) {
+  /**
+   * A factory rather than an embedder, because whose key pays is a per-tenant
+   * question and this store is handed the tenant on every call that embeds.
+   */
+  constructor(pool: Pool, embedders: EmbedderFactory, chunking: ChunkOptions = {}) {
     this.#pool = pool;
-    this.#embedder = embedder;
+    this.#embedders = embedders;
     this.#chunking = chunking;
   }
 
@@ -145,8 +149,9 @@ export class PostgresMemoryStore implements MemoryStore {
     if (pieces.length === 0) {
       throw new MemoryError(`document "${input.title}" produced no chunks`);
     }
-    const vectors = await this.#embedder.embed(pieces);
-    assertDimensions(this.#embedder.model, vectors);
+    const embedder = await this.#embedders.for(input.tenantId);
+    const vectors = await embedder.embed(pieces);
+    assertDimensions(embedder.model, vectors);
 
     const client = await this.#pool.connect();
     try {
@@ -208,7 +213,8 @@ export class PostgresMemoryStore implements MemoryStore {
       return [];
     }
 
-    const [vector] = await this.#embedder.embed([query.text]);
+    const embedder = await this.#embedders.for(tenantId);
+    const [vector] = await embedder.embed([query.text]);
     if (!vector) {
       throw new MemoryError('the query could not be embedded');
     }

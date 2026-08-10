@@ -88,7 +88,24 @@ export const embeddingProviderSchema = z.object({
   model: z.string().min(1),
   /** Where `/embeddings` lives. */
   baseUrl: z.string().url(),
-  apiKeyEnv: z.string().min(1),
+  /**
+   * The name a tenant's own embedding key is filed under.
+   *
+   * It exists so shared knowledge can be paid for the same way completions are
+   * — a key pasted into the console rather than an environment variable the
+   * person running this does not control. Distinct from the completion
+   * providers on purpose, and checked below: a name shared with one of them
+   * would make an embedding key look like a completion key to the router.
+   */
+  provider: z.string().min(1).default('embedding'),
+  /**
+   * The environment variable holding the platform's key, when there is one.
+   *
+   * Optional, and that is the point: a deployment where every tenant brings
+   * their own has no platform key to name, and requiring one would put a
+   * secret in the environment purely to satisfy a schema.
+   */
+  apiKeyEnv: z.string().min(1).optional(),
 });
 
 export type EmbeddingProvider = z.infer<typeof embeddingProviderSchema>;
@@ -164,6 +181,18 @@ export function parseModelConfig(source: unknown, origin: string): ModelConfig {
         `provider "${entry.provider}" is openai-compatible and needs a baseUrl in ${origin}`,
       );
     }
+  }
+
+  // The embedding key is filed under its own name and must stay that way. A
+  // name shared with a completion provider would make an embedding key look to
+  // the router like a key for that provider — so a tenant who paid only for
+  // embeddings would have their turns routed as if they had brought a
+  // completion key, and every uncovered task would fail.
+  if (config.embedding && config.providers[config.embedding.provider]) {
+    throw new ModelConfigError(
+      `the embedding provider is called "${config.embedding.provider}" in ${origin}, which is ` +
+        `also a completion provider. Give it a name of its own — its key is a different key`,
+    );
   }
 
   for (const task of TASK_KINDS) {

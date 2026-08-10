@@ -100,7 +100,12 @@ export default async function Keys({
     const mine = new Set(await api.modelKeys.providers(tenant.id));
     const providers = Object.keys(api.models.providers).sort();
     const missing = providers.filter((provider) => !mine.has(provider));
-    const usingOwn = mine.size > 0;
+    // Only a *completion* key opts this tenant out of the platform's. The
+    // embedding key pays for shared knowledge and routes nothing, so holding
+    // one alone must not raise the warning below — a tenant who paid only for
+    // knowledge has not chosen anything about where their turns go.
+    const usingOwn = providers.some((provider) => mine.has(provider));
+    const embedding = api.models.embedding ?? null;
 
     return (
       <div className="space-y-8">
@@ -147,6 +152,85 @@ export default async function Keys({
           </Card>
         ) : null}
 
+        {embedding ? (
+          <section className="space-y-3">
+            <h2 className="text-lg font-medium">Shared knowledge</h2>
+            <p className="text-muted-foreground max-w-2xl text-sm">
+              A separate key, because it buys a different thing: turning your documents into vectors
+              so agents can search them. It does <strong>not</strong> opt you out of anything —
+              there is one embedding provider and nowhere else this could be routed, so a tenant
+              without a key here simply uses whatever the deployment configured, if it configured
+              anything.
+            </p>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <KeyIcon
+                    className={
+                      mine.has(embedding.provider)
+                        ? 'text-primary size-4'
+                        : 'text-muted-foreground size-4'
+                    }
+                    weight="fill"
+                  />
+                  {embedding.provider}
+                  {mine.has(embedding.provider) ? (
+                    <Badge variant="secondary" className="ml-auto">
+                      <CheckCircleIcon weight="fill" /> key stored
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="ml-auto">
+                      no key here
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-muted-foreground text-sm">
+                  Embeds with <code className="text-foreground">{embedding.model}</code> at{' '}
+                  <code className="text-foreground break-all">{embedding.baseUrl}</code>. Your key
+                  changes who pays, never which model embeds — vectors from two different models
+                  cannot be compared, so the model stays what the deployment declared.
+                </p>
+                <form action={saveKey} className="flex gap-2">
+                  <input type="hidden" name="provider" value={embedding.provider} />
+                  <Input
+                    type="password"
+                    name="apiKey"
+                    autoComplete="off"
+                    placeholder={
+                      mine.has(embedding.provider) ? 'Replace with a new key' : 'Paste your key'
+                    }
+                  />
+                  <Button type="submit" size="sm">
+                    {mine.has(embedding.provider) ? 'Replace' : 'Save'}
+                  </Button>
+                </form>
+                {mine.has(embedding.provider) ? (
+                  <form action={forgetKey}>
+                    <input type="hidden" name="provider" value={embedding.provider} />
+                    <Button type="submit" size="sm" variant="ghost">
+                      Forget it
+                    </Button>
+                  </form>
+                ) : embedding.apiKeyEnv ? (
+                  <p className="text-muted-foreground text-sm">
+                    Without one, embedding falls back to{' '}
+                    <code className="text-foreground">{embedding.apiKeyEnv}</code> from the
+                    environment.
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    This deployment configured no key of its own, so shared knowledge does nothing
+                    until you paste one here.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+        ) : null}
+
+        <h2 className="text-lg font-medium">Turns</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {providers.map((provider) => {
             const entry = api.models.providers[provider]!;

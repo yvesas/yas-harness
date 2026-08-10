@@ -42,6 +42,9 @@ imports an adapter. See [ADR 0001](./adr/0001-hexagonal-architecture.md).
 | `UsageReader` | `src/telemetry/model-usage.ts` | `PostgresUsageRecorder`, `InMemoryUsageRecorder` |
 | `HealthProbe` | `src/lifecycle/health.ts` | `databaseProbe` |
 | `TenantStore` | `src/tenants/tenant-store.ts` | `PostgresTenantStore`, `InMemoryTenantStore` |
+| `MemoryStore` | `src/memory/memory-store.ts` | `PostgresMemoryStore` |
+| `Embedder` | `src/memory/embedder.ts` | `OpenAiCompatibleEmbedder`, `LazyEmbedder` |
+| `WorkflowRunStore` | `src/workflows/workflow-run-store.ts` | `PostgresWorkflowRunStore`, `InMemoryWorkflowRunStore` |
 
 Every port has an in-memory or scripted adapter shipped in `src/`, not hidden
 in `tests/` — products that fork the harness need them to test their own agents
@@ -82,6 +85,8 @@ without a network or an API bill.
 | `src/mcp/` | MCP server exposing the connectors as tools (mechanics, no transport) |
 | `src/compression/` | Context compression: a gated engine pipeline, plus the eval that gates its release |
 | `src/redaction/` | Secret redaction on the persistence and log paths (always on) |
+| `src/agents/` | Agents declared in `config/agents/` rather than written in TypeScript |
+| `src/workflows/` | Several agents in order, and the places a person stands |
 | `src/approval/` | Human approval queue |
 
 ## The path of a message

@@ -27,6 +27,29 @@ docker compose down       # stop, keep everything
 docker compose down -v    # stop and erase the data too
 ```
 
+## Upgrading
+
+Run `./start.sh` after pulling. It is safe to run any number of times and it
+creates whatever a new version expects.
+
+One upgrade needs saying out loud, because `git pull` does the damage before
+you can read about it. **`config/models.json` used to be versioned and is now
+yours**, so the commit that stopped tracking it *deletes your copy* when you
+pull past it — it was a tracked file, and git removes tracked files it no
+longer knows about. Nothing is lost that matters, but the console will not
+start until there is a file there again:
+
+```bash
+./start.sh                                        # copies the example, or
+cp config/models.example.json config/models.json  # the same thing by hand
+```
+
+The error names this fix too. If you had edited that file, the version you
+edited is in the Git history up to that commit — `git show <commit>:config/models.json`.
+
+Why it moved: which vendor answers your questions is not a choice this project
+should make for you, and a file everybody inherits makes it one.
+
 ## What you are looking at
 
 A **harness** is the part of an AI product that is not the product: it takes a
@@ -55,22 +78,44 @@ matters, rather than failing.
 
 ### A model key
 
-Only the **Playground** and **Evals** need one. Everything else — spend,
-traces, connections, approvals — works without.
+Only the **Playground**, **Evals** and anything that actually runs an agent need
+one. Everything else — spend, traces, connections, approvals — works without.
 
-`config/models.json` declares which providers exist and **which environment
-variable holds each key**. The shipped config names them by the role they play:
+**Paste it on the Keys page.** That is the supported way: the key is encrypted
+the moment it arrives, never reaches a file, never goes near Git, and is never
+displayed again, including to you. Changing it is the same form. Nothing has to
+be restarted — keys are read as they are used.
 
-| Provider | For | Variable |
-| --- | --- | --- |
-| `premium` | Reasoning, and anything sensitive | `PREMIUM_MODEL_API_KEY` |
-| `fast` | Triage and simple work | `FAST_MODEL_API_KEY` |
+`.env` still works, and means something different: a key there belongs to the
+**deployment** and is used by anyone who brought none of their own. That is
+convenient when you are the only person using it, and wrong when you are running
+this for other people.
 
-Put one in `.env` and run `./start.sh` again. Who is behind each name is your
-choice: `fast` is
-any OpenAI-compatible endpoint — Groq, Together, Fireworks, Cerebras, OpenAI, or
-a local Ollama — and changing vendor is changing a base URL in
-`config/models.json`.
+Which providers exist, and which environment variable holds each deployment-wide
+key, is `config/models.json` — **your** file, not in Git. The example ships two
+providers named for the role they play rather than for who sells them:
+
+| Provider | For |
+| --- | --- |
+| `premium` | Reasoning, and anything sensitive |
+| `fast` | Triage and simple work |
+
+Who is behind each name is your choice. `openai-compatible` covers most of the
+market — Groq, Together, Fireworks, Cerebras, Mistral, xAI, OpenRouter, OpenAI
+itself, Gemini's compatible endpoint, or a local Ollama or vLLM — so changing
+vendor is changing a base URL. You can do it on the **Config** page, and it is
+checked with the harness's own parser before it saves.
+
+Two things that catch people:
+
+- **A field ending in `Env` wants the *name* of an environment variable**, in
+  upper case — `MY_MODEL_KEY`, not the key itself. A key pasted there is
+  refused, and the error says to use the Keys page.
+- **One key can be enough.** A tenant with any completion key of their own is
+  routed only to providers they have a key for, so covering a single provider
+  works as long as every route still has a candidate. What fails, deliberately,
+  is a route with none — falling back would send your prompts to a provider you
+  did not choose.
 
 ### A connected source
 

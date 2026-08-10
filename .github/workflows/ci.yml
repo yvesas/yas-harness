@@ -27,6 +27,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Create config/models.json
+        # A deployment's own file, not in Git -- so a clean checkout has only
+        # the example. This is what start.sh does on a real machine, and doing
+        # it here means CI runs on the same config a first-time user gets.
+        run: cp config/models.example.json config/models.json
+
       - name: Lint
         run: npm run lint
 

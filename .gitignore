@@ -24,3 +24,9 @@ coverage/
 
 # local connector config (secrets referenced by env)
 config/connectors.json
+# Your model providers, models and routes. Shipped as models.example.json and
+# copied on first start. Not versioned, for the same reason connectors.json is
+# not: which vendor you use is yours to choose, and a file every fork inherits
+# would make it ours. Nothing secret goes in it either way -- keys live on the
+# console's Keys page or in the environment.
+config/models.json

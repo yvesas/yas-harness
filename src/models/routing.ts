@@ -40,6 +40,31 @@ export type Price = z.infer<typeof priceSchema>;
  * hardcodes a list of vendors has chosen them for every product built on it,
  * and the whole point of the `ModelProvider` port is that it has not.
  */
+/**
+ * The **name of an environment variable**, not a key.
+ *
+ * Uppercase is demanded rather than merely conventional, and the reason is a
+ * mistake somebody actually made: a provider key pasted into this field on the
+ * console's config screen. A key is a run of letters, digits and underscores,
+ * so no shape rule about "identifier-ness" would have caught it -- but every
+ * provider key in circulation has lowercase in it, and no environment variable
+ * anybody names does.
+ *
+ * The cost of being strict is a deployment with lowercase variable names, which
+ * is legal and vanishingly rare, and which gets an error saying exactly what to
+ * do. The cost of being loose is a secret in a file that is read back and
+ * displayed.
+ */
+const environmentVariableName = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(
+    /^[A-Z][A-Z0-9_]*$/,
+    'must be the NAME of an environment variable (upper case, like MY_MODEL_KEY) -- ' +
+      "not the key itself. Paste the key on the console's Keys page, where it is encrypted",
+  );
+
 export const providerEntrySchema = z.object({
   /**
    * Which adapter speaks to it.
@@ -58,7 +83,7 @@ export const providerEntrySchema = z.object({
    * Named here so no vendor's convention is written into the harness, and so
    * two deployments of the same provider can use different variables.
    */
-  apiKeyEnv: z.string().min(1),
+  apiKeyEnv: environmentVariableName,
 });
 
 export type ProviderEntry = z.infer<typeof providerEntrySchema>;
@@ -105,7 +130,7 @@ export const embeddingProviderSchema = z.object({
    * their own has no platform key to name, and requiring one would put a
    * secret in the environment purely to satisfy a schema.
    */
-  apiKeyEnv: z.string().min(1).optional(),
+  apiKeyEnv: environmentVariableName.optional(),
 });
 
 export type EmbeddingProvider = z.infer<typeof embeddingProviderSchema>;
@@ -220,7 +245,15 @@ export async function loadModelConfig(path: string): Promise<ModelConfig> {
   try {
     raw = await readFile(path, 'utf8');
   } catch (error) {
-    throw new ModelConfigError(`cannot read model config from ${path}`, { cause: error });
+    // Names the fix, because the most likely reason is a fresh clone: this
+    // file is a deployment's own and is not in Git, so it has to be created
+    // once. `start.sh` does it; anybody bypassing that gets told how.
+    throw new ModelConfigError(
+      `cannot read model config from ${path}. It is not in Git -- which vendor answers is ` +
+        `yours to choose -- so copy the example next to it: ` +
+        `cp config/models.example.json config/models.json`,
+      { cause: error },
+    );
   }
 
   let source: unknown;

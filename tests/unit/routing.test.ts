@@ -12,7 +12,10 @@ import {
   parseModelConfig,
 } from '../../src/models/routing.js';
 
-const CONFIG_PATH = join(process.cwd(), 'config', 'models.json');
+// The example, not `models.json` -- that one is a deployment's own file now,
+// absent from a fresh clone. What these tests guard is the shape everybody
+// starts from, which is exactly what the example is.
+const CONFIG_PATH = join(process.cwd(), 'config', 'models.example.json');
 
 const price = { inputPerMTok: 1, outputPerMTok: 2, cachedInputPerMTok: 0.1 };
 
@@ -227,5 +230,33 @@ describe('the embedding provider’s name', () => {
         'test',
       ),
     ).toThrow(/its key is a different key/);
+  });
+});
+
+describe('a key pasted where a variable name belongs', () => {
+  it('is refused, with the place it should have gone', () => {
+    // Somebody did this: a Groq key pasted into apiKeyEnv on the console's
+    // config screen. No "is it an identifier" rule would catch it — a key is
+    // letters, digits and underscores — but every provider key has lower case
+    // in it and no environment variable anybody names does.
+    expect(() =>
+      parseModelConfig(
+        config({
+          providers: {
+            groq: {
+              kind: 'openai-compatible',
+              baseUrl: 'https://api.example.test/v1',
+              apiKeyEnv: 'gsk_aRealLookingKeyPastedByMistake',
+            },
+            anthropic: { kind: 'anthropic', apiKeyEnv: 'PREMIUM_KEY' },
+          },
+        }),
+        'test',
+      ),
+    ).toThrow(/NAME of an environment variable.*Keys page/s);
+  });
+
+  it('still accepts an ordinary variable name', () => {
+    expect(() => parseModelConfig(config(), 'test')).not.toThrow();
   });
 });

@@ -32,17 +32,32 @@ export default async function Config({
     return (
       <>
         <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
-        <p className="text-muted-foreground text-sm">
-          These are the files in <code>config/</code>, versioned in Git. The console edits them; it
-          does not replace them with a database — that would cost the history, the review of a price
-          change and a reproducible deploy, and buy a form. Editing them with <code>vim</code> keeps
-          working.
+        <p className="text-muted-foreground max-w-3xl text-sm">
+          These are the files in <code>config/</code>. The console edits them; it does not replace
+          them with a database — that would cost the history, the review of a price change and a
+          reproducible deploy, and buy a form. Editing them with <code>vim</code> keeps working.
+        </p>
+        <p className="text-muted-foreground max-w-3xl text-sm">
+          <code>models.json</code> and <code>connectors.json</code> are <strong>yours</strong> and
+          are not in Git — which vendor answers, and which sources you connect, are choices this
+          project does not make for you. Each ships as a <code>.example</code> beside it. No secret
+          belongs in any of them: a field ending in <code>Env</code> wants the{' '}
+          <em>name of an environment variable</em>, and a key pasted there is refused. Keys go on
+          the <a href="/keys">Keys page</a>, encrypted.
         </p>
 
-        <nav>
+        <nav className="flex flex-wrap items-center gap-2 text-sm">
           {files.map((one) => (
-            <a key={one} href={`/config?file=${encodeURIComponent(one)}`}>
-              <code>{one === file ? `[${one}]` : one}</code>
+            <a
+              key={one}
+              href={`/config?file=${encodeURIComponent(one)}`}
+              className={
+                one === file
+                  ? 'bg-secondary text-secondary-foreground rounded-md px-2 py-1'
+                  : 'text-muted-foreground hover:text-foreground rounded-md px-2 py-1'
+              }
+            >
+              <code>{one}</code>
             </a>
           ))}
         </nav>

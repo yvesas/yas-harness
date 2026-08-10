@@ -157,6 +157,18 @@ else
   ok '.env is there'
 fi
 
+# Which vendor answers is yours, so the file that says so is yours: copied once
+# and never versioned, the same as config/connectors.json. Editing the example
+# instead would put your choice in everybody's fork.
+if [ ! -f config/models.json ]; then
+  cp config/models.example.json config/models.json
+  ok 'Created config/models.json from the example'
+  hint 'It is yours -- not in Git. Change providers, models and routes freely,'
+  hint 'by hand or on the console Config page.'
+else
+  ok 'config/models.json is there'
+fi
+
 # The master key seals every credential. Generated rather than asked for: a key
 # somebody has to invent is a key somebody will make short.
 if ! grep -qE '^MASTER_ENCRYPTION_KEY=.+' .env; then
@@ -172,12 +184,13 @@ else
   ok 'Master encryption key is set'
 fi
 
-if grep -qE '^(PREMIUM|FAST)_MODEL_API_KEY=.+' .env; then
-  ok 'A model key is set'
+if grep -qE '^[A-Z][A-Z0-9_]*_API_KEY=.+' .env; then
+  ok 'A model key is set in .env'
 else
-  warn 'No model key set — the playground and evals will say so'
-  hint 'Everything else works without one. To add it later, put a key in .env:'
-  hint '  FAST_MODEL_API_KEY=...     (see config/models.json for the names)'
+  warn 'No model key in .env — that is fine, and usually right'
+  hint 'Paste your keys on the console Keys page instead: they are encrypted'
+  hint 'there, never written to a file, and belong to you rather than to this'
+  hint 'deployment. .env is for a key the whole deployment should share.'
 fi
 
 # --- 5. Start ---------------------------------------------------------------

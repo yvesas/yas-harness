@@ -39,6 +39,22 @@ export async function saveKey(form: FormData): Promise<never> {
     outcome = `saved=${encodeURIComponent(provider)}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // Logged as well as shown. A failure that exists only in a query string is
+    // a failure nobody can help with afterwards: the person reads it, presses
+    // back, and the only record of what went wrong is gone. The provider is
+    // named; the key never is, and there is nothing here that could print it.
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: 'model_key.store_failed',
+        provider,
+        tenantId: tenant.id,
+        // Says whether the form arrived empty, which is a different problem
+        // from the vault refusing — and indistinguishable from the outside.
+        keyLength: apiKey.length,
+        message,
+      }),
+    );
     outcome = `error=${encodeURIComponent(message.slice(0, 300))}`;
   }
 

@@ -202,6 +202,47 @@ an agent you have not created refuses to run and says which one is missing.
 **The callback URL must match byte for byte.** `localhost` and `127.0.0.1` are
 different strings to a provider. Pick one, register it, browse to it.
 
+**A 413 on the very first call is a per-minute budget, not a big message.**
+Providers count the output ceiling you *ask for* against your tokens-per-minute
+limit before reading a word of the prompt. The harness asks for 8000 by
+default, so a model whose limit is 6000 refuses everything you send it — with
+any prompt, immediately — and the message reads as though what you sent was too
+big:
+
+```
+Request too large ... on tokens per minute (TPM): Limit 6000, Requested 8037
+```
+
+Give that model its own ceiling in `config/models.json`:
+
+```json
+"groq/instant": {
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tier": "cheap",
+  "maxOutputTokens": 2000,
+  "price": { "inputPerMTok": 0.05, "outputPerMTok": 0.08, "cachedInputPerMTok": 0.05 }
+}
+```
+
+It belongs to the model rather than the provider because it depends on your
+account's tier, and two models behind one key rarely share a limit.
+
+**A small model will invent tool names.** An 8B-class model asked to use tools
+sometimes calls one that was never offered, and a strict provider rejects the
+turn outright:
+
+```
+tool call validation failed: attempted to call tool 'get_notebook_info'
+which was not in request.tools
+```
+
+This is why the `routing` route can use a much cheaper model than `simple`:
+routing asks for a JSON object in plain text, and nothing else. Anything
+carrying tools — `simple`, `reasoning`, an agent with connections — wants a
+model that handles them. If turns fail this way, move that route's first choice
+up a size; the route order in `config/models.json` is the only thing to change.
+
 **Refresh tokens differ per provider**, and this is where a connection silently
 dies after an hour:
 

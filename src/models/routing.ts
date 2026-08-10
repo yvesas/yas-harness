@@ -95,6 +95,22 @@ export const modelEntrySchema = z.object({
   model: z.string().min(1),
   tier: modelTierSchema,
   price: priceSchema,
+  /**
+   * The most this model may be asked to write, when the harness's own default
+   * is wrong for it.
+   *
+   * A property of the model **and of the account**, which is why it lives here
+   * rather than in an adapter. Providers count the ceiling you ask for against
+   * a per-minute budget *before* reading a word of the prompt, so a default
+   * that is generous for one model rejects every request to another: a
+   * free-tier 8B with a 6000-token minute refuses an 8000-token ceiling
+   * outright, whatever you actually asked it.
+   *
+   * Worth describing because the failure does not look like a limit. It
+   * arrives as a 413 on the very first call, with any prompt, and reads as
+   * though the message was too big.
+   */
+  maxOutputTokens: z.number().int().min(1).max(200_000).optional(),
 });
 
 export type ModelEntry = z.infer<typeof modelEntrySchema>;

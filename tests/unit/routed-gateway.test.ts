@@ -402,3 +402,95 @@ describe('RoutedGateway', () => {
     });
   });
 });
+
+describe('a model that declares its own output ceiling', () => {
+  it('is asked for no more than that, whatever the caller wanted', async () => {
+    // Providers count the ceiling you ask for against a per-minute budget
+    // before reading the prompt, so a default that suits one model rejects
+    // every request to another — a 413 on the first call, with any prompt.
+    const provider = new FakeProvider('groq', () => answer('ok'));
+    const gateway = new RoutedGateway({
+      config: parseModelConfig(
+        {
+          providers: {
+            groq: { kind: 'openai-compatible', baseUrl: 'https://x.test/v1', apiKeyEnv: 'K' },
+          },
+          models: {
+            small: {
+              provider: 'groq',
+              model: 'llama-instant',
+              tier: 'cheap',
+              price: { inputPerMTok: 1, outputPerMTok: 1, cachedInputPerMTok: 1 },
+              maxOutputTokens: 2000,
+            },
+            big: {
+              provider: 'groq',
+              model: 'llama-versatile',
+              tier: 'premium',
+              price: { inputPerMTok: 1, outputPerMTok: 1, cachedInputPerMTok: 1 },
+            },
+          },
+          routes: {
+            routing: ['small'],
+            simple: ['small'],
+            reasoning: ['big'],
+            sensitive: ['big'],
+          },
+        },
+        'test',
+      ),
+      providers: [provider],
+      recorder: new InMemoryUsageRecorder(),
+      sleep: () => Promise.resolve(),
+    });
+
+    await gateway.complete({
+      task: 'simple',
+      messages: [userMessage('hi')],
+      maxOutputTokens: 8000,
+      attribution: { tenantId: 'tenant-1', sessionId: 'session-1' },
+    });
+
+    expect(provider.calls[0]?.request.maxOutputTokens).toBe(2000);
+  });
+
+  it('leaves the caller alone when the model declares none', async () => {
+    const provider = new FakeProvider('groq', () => answer('ok'));
+    const gateway = new RoutedGateway({
+      config: parseModelConfig(
+        {
+          providers: {
+            groq: { kind: 'openai-compatible', baseUrl: 'https://x.test/v1', apiKeyEnv: 'K' },
+          },
+          models: {
+            big: {
+              provider: 'groq',
+              model: 'llama-versatile',
+              tier: 'premium',
+              price: { inputPerMTok: 1, outputPerMTok: 1, cachedInputPerMTok: 1 },
+            },
+          },
+          routes: {
+            routing: ['big'],
+            simple: ['big'],
+            reasoning: ['big'],
+            sensitive: ['big'],
+          },
+        },
+        'test',
+      ),
+      providers: [provider],
+      recorder: new InMemoryUsageRecorder(),
+      sleep: () => Promise.resolve(),
+    });
+
+    await gateway.complete({
+      task: 'simple',
+      messages: [userMessage('hi')],
+      maxOutputTokens: 8000,
+      attribution: { tenantId: 'tenant-1', sessionId: 'session-1' },
+    });
+
+    expect(provider.calls[0]?.request.maxOutputTokens).toBe(8000);
+  });
+});

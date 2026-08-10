@@ -64,7 +64,11 @@ export default async function Approvals() {
                       <code>{approval.toolName}</code>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {approval.toolCallId.startsWith('mcp:') ? 'MCP' : 'a conversation'}
+                      {approval.toolCallId.startsWith('mcp:')
+                        ? 'MCP'
+                        : approval.toolName.startsWith('workflow.')
+                          ? 'a workflow step'
+                          : 'a conversation'}
                     </TableCell>
                     <TableCell>
                       <a href={`/approvals/${approval.id}`}>Review</a>

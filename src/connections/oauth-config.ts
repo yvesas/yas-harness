@@ -22,7 +22,15 @@ export const oauthProviderConfigSchema = z.object({
   tokenEndpoint: z.url(),
   clientId: z.string().min(1),
   /** The environment variable holding the client secret — not the secret. */
-  clientSecretEnv: z.string().min(1),
+  clientSecretEnv: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(
+      /^[A-Z][A-Z0-9_]*$/,
+      'must be the NAME of an environment variable (upper case, like GITHUB_CLIENT_SECRET) -- ' +
+        'not the secret itself, which must never be written to a file in config/',
+    ),
   /**
    * What to ask for, if this provider takes it in the authorization request.
    *

@@ -62,6 +62,10 @@ COPY --from=build /app/console/.next/static ./console/.next/static
 # harness's — personas and model routing — and the console reads it through
 # `createHarness` like any other product would.
 COPY config ./config
+# The real one is a deployment's own file and is not in Git, so a build from a
+# fresh clone has only the example. Copied rather than renamed: a build context
+# that *does* carry one -- somebody building their own image -- keeps it.
+RUN cp -n config/models.example.json config/models.json || true
 COPY LICENSE NOTICE ./
 
 LABEL org.opencontainers.image.title="yas-console" \

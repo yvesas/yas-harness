@@ -14,7 +14,7 @@
  * where the error now appears, saying the same thing it always said.
  */
 
-import type { Embedder } from './embedder.js';
+import type { Embedder, EmbeddingPurpose } from './embedder.js';
 
 export class LazyEmbedder implements Embedder {
   readonly model: string;
@@ -28,11 +28,11 @@ export class LazyEmbedder implements Embedder {
     this.#build = build;
   }
 
-  embed(texts: readonly string[]): Promise<number[][]> {
+  embed(texts: readonly string[], purpose: EmbeddingPurpose): Promise<number[][]> {
     // Built once and kept: an embedder holds a client, and rebuilding it per
     // batch would throw away whatever connection reuse it manages.
     this.#embedder ??= this.#build();
-    return this.#embedder.embed(texts);
+    return this.#embedder.embed(texts, purpose);
   }
 
   /** True once something has actually embedded. For tests. */

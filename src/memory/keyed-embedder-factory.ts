@@ -76,6 +76,7 @@ export class KeyedEmbedderFactory implements EmbedderFactory {
       model: this.#entry.model,
       baseUrl: this.#entry.baseUrl,
       dimensions: this.#entry.dimensions,
+      inputType: this.#entry.inputType,
       // Passed as a value either way: which one it is has already been decided
       // above, and handing the adapter a variable name to read again would put
       // the decision in two places.

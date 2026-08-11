@@ -24,6 +24,7 @@ const ENTRY = {
   baseUrl: 'https://api.example.com/v1',
   provider: 'embedding',
   dimensions: DIMENSIONS,
+  inputType: false,
   apiKeyEnv: 'EMBEDDING_MODEL_API_KEY',
 };
 
@@ -71,7 +72,7 @@ describe('KeyedEmbedderFactory', () => {
       fetch,
     });
 
-    await (await factory.for(TENANT)).embed(['hello']);
+    await (await factory.for(TENANT)).embed(['hello'], 'document');
 
     // Their key, not the platform's, even though the platform has one.
     expect(sent[0]).toBe('Bearer tenant-key');
@@ -82,7 +83,7 @@ describe('KeyedEmbedderFactory', () => {
     const { sent, fetch } = spyFetch();
     const factory = new KeyedEmbedderFactory({ entry: ENTRY, modelKeys: keys(), fetch });
 
-    await (await factory.for(TENANT)).embed(['hello']);
+    await (await factory.for(TENANT)).embed(['hello'], 'document');
 
     // Unlike completions, bringing no key is not opting out of anything: there
     // is one embedding provider, so there is nowhere else this could be routed.
@@ -147,7 +148,7 @@ describe('KeyedEmbedderFactory', () => {
     const { sent, fetch } = spyFetch();
     const factory = new KeyedEmbedderFactory({ entry: ENTRY, fetch });
 
-    await (await factory.for(TENANT)).embed(['hello']);
+    await (await factory.for(TENANT)).embed(['hello'], 'document');
 
     expect(sent[0]).toBe('Bearer platform-key');
   });

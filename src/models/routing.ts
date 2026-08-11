@@ -155,6 +155,16 @@ export const embeddingProviderSchema = z.object({
    */
   dimensions: z.number().int().min(1).max(16_000).default(1536),
   /**
+   * Whether this provider wants to be told a document from a question.
+   *
+   * Voyage and Cohere both take `input_type` and both retrieve measurably
+   * better with it; OpenAI has no such field and refuses parameters it does not
+   * know. So it is declared rather than guessed -- guessing would mean this
+   * file knowing which vendor is behind a base URL, which is the one thing it
+   * must not know.
+   */
+  inputType: z.boolean().default(false),
+  /**
    * The environment variable holding the platform's key, when there is one.
    *
    * Optional, and that is the point: a deployment where every tenant brings

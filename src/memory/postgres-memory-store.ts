@@ -150,7 +150,7 @@ export class PostgresMemoryStore implements MemoryStore {
       throw new MemoryError(`document "${input.title}" produced no chunks`);
     }
     const embedder = await this.#embedders.for(input.tenantId);
-    const vectors = await embedder.embed(pieces);
+    const vectors = await embedder.embed(pieces, 'document');
     assertDimensions(embedder.model, vectors, embedder.dimensions);
 
     const client = await this.#pool.connect();
@@ -214,7 +214,7 @@ export class PostgresMemoryStore implements MemoryStore {
     }
 
     const embedder = await this.#embedders.for(tenantId);
-    const [vector] = await embedder.embed([query.text]);
+    const [vector] = await embedder.embed([query.text], 'query');
     if (!vector) {
       throw new MemoryError('the query could not be embedded');
     }

@@ -1,0 +1,19 @@
+{
+  "id": "triagem",
+  "name": "Anotar e arquivar",
+  "description": "Anota o que voce disser, depois pede sua aprovacao antes de guardar um link relacionado.",
+  "inputLabel": "O que deve ser anotado?",
+  "steps": [
+    {
+      "id": "anotar",
+      "agent": "notes",
+      "prompt": "Escreva isto como uma nota, escolhendo um titulo curto: {{input}}\n\nDepois responda apenas com o titulo que voce usou."
+    },
+    {
+      "id": "arquivar",
+      "agent": "links",
+      "approve": true,
+      "prompt": "Guarde um link de referencia para o assunto da nota abaixo, com uma linha explicando por que vale guardar.\n\nNota: {{steps.anotar}}"
+    }
+  ]
+}

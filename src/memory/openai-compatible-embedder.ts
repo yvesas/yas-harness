@@ -18,6 +18,8 @@ import { assertDimensions, EmbeddingError, type Embedder } from './embedder.js';
 export interface OpenAiCompatibleEmbedderOptions {
   readonly model: string;
   readonly baseUrl: string;
+  /** What this model returns per passage; checked before anything is stored. */
+  readonly dimensions: number;
   readonly apiKeyEnv?: string;
   readonly apiKey?: string;
   /** Texts per request. Providers cap this; 64 is under every cap in reach. */
@@ -34,6 +36,7 @@ interface EmbeddingResponse {
 
 export class OpenAiCompatibleEmbedder implements Embedder {
   readonly model: string;
+  readonly dimensions: number;
   readonly #baseUrl: string;
   readonly #apiKey: string;
   readonly #batch: number;
@@ -41,6 +44,7 @@ export class OpenAiCompatibleEmbedder implements Embedder {
 
   constructor(options: OpenAiCompatibleEmbedderOptions) {
     this.model = options.model;
+    this.dimensions = options.dimensions;
     this.#baseUrl = trimTrailingSlashes(options.baseUrl);
     const key = options.apiKey ?? (options.apiKeyEnv ? process.env[options.apiKeyEnv] : undefined);
     if (!key) {
@@ -59,7 +63,7 @@ export class OpenAiCompatibleEmbedder implements Embedder {
     for (let start = 0; start < texts.length; start += this.#batch) {
       vectors.push(...(await this.#batchEmbed(texts.slice(start, start + this.#batch))));
     }
-    assertDimensions(this.model, vectors);
+    assertDimensions(this.model, vectors, this.dimensions);
     return vectors;
   }
 

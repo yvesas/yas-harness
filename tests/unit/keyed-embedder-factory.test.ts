@@ -18,10 +18,12 @@ import { KeyedEmbedderFactory } from '../../src/memory/keyed-embedder-factory.js
 import type { ModelKeys } from '../../src/models/model-keys.js';
 
 const TENANT = 'tenant-1';
+const DIMENSIONS = 1536;
 const ENTRY = {
   model: 'text-embedding-3-small',
   baseUrl: 'https://api.example.com/v1',
   provider: 'embedding',
+  dimensions: DIMENSIONS,
   apiKeyEnv: 'EMBEDDING_MODEL_API_KEY',
 };
 
@@ -31,10 +33,13 @@ function spyFetch() {
   const fetch: typeof globalThis.fetch = (_url, init) => {
     sent.push(String((init?.headers as Record<string, string>)?.['authorization']));
     return Promise.resolve(
-      new Response(JSON.stringify({ data: [{ index: 0, embedding: new Array(1536).fill(0.1) }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({ data: [{ index: 0, embedding: new Array(DIMENSIONS).fill(0.1) }] }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     );
   };
   return { sent, fetch };

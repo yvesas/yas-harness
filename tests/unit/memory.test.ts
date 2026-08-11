@@ -19,7 +19,7 @@ import type { ConnectionStore } from '../../src/connections/connection-store.js'
 import { chunk } from '../../src/memory/chunking.js';
 import {
   assertDimensions,
-  EMBEDDING_DIMENSIONS,
+  DEFAULT_EMBEDDING_DIMENSIONS,
   EmbeddingError,
 } from '../../src/memory/embedder.js';
 import { OpenAiCompatibleEmbedder } from '../../src/memory/openai-compatible-embedder.js';
@@ -82,18 +82,26 @@ describe('cutting a document into chunks', () => {
   });
 });
 
-describe('the embedding dimension is part of the schema', () => {
-  it('rejects a model whose output is the wrong size, naming the fix', () => {
+describe('the embedding dimension a deployment declared', () => {
+  it('rejects a model whose output is the wrong size, naming the number to set', () => {
     // The database would reject it too, and the message would be about a
-    // column. This one is about the model, which is the thing to change.
+    // column. This one names the model, the size it actually returned, and the
+    // line to change — because "vector(1024) expected 1536" tells somebody
+    // nothing about which of their two choices was wrong.
     expect(() => {
-      assertDimensions('some-model', [[1, 2, 3]]);
-    }).toThrow(/some-model.*3 dimensions.*migration 0012/s);
+      assertDimensions('some-model', [[1, 2, 3]], DEFAULT_EMBEDDING_DIMENSIONS);
+    }).toThrow(/some-model.*3 dimensions.*"dimensions": 3.*config\/models\.json/s);
   });
 
-  it('accepts one of the right size', () => {
+  it('accepts one of the size that deployment declared, whatever it is', () => {
+    // 1024 is Voyage, Cohere and Mistral; 1536 is OpenAI; 768 a local nomic.
+    // None of them is more correct than the others, which is why the number is
+    // configuration rather than a constant.
     expect(() => {
-      assertDimensions('good', [new Array<number>(EMBEDDING_DIMENSIONS).fill(0)]);
+      assertDimensions('voyage', [new Array<number>(1024).fill(0)], 1024);
+    }).not.toThrow();
+    expect(() => {
+      assertDimensions('openai', [new Array<number>(1536).fill(0)], 1536);
     }).not.toThrow();
   });
 });
@@ -115,7 +123,7 @@ function endpoint(answer: (input: string[]) => unknown) {
 }
 
 function vector(seed: number): number[] {
-  return new Array<number>(EMBEDDING_DIMENSIONS).fill(seed);
+  return new Array<number>(DEFAULT_EMBEDDING_DIMENSIONS).fill(seed);
 }
 
 describe('the embedding adapter', () => {
@@ -126,6 +134,7 @@ describe('the embedding adapter', () => {
     const embedder = new OpenAiCompatibleEmbedder({
       model: 'test',
       baseUrl: 'https://api.example.test/v1',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       apiKey: 'k',
       batchSize: 2,
       fetch: stub,
@@ -145,6 +154,7 @@ describe('the embedding adapter', () => {
     const embedder = new OpenAiCompatibleEmbedder({
       model: 'test',
       baseUrl: 'https://api.example.test/v1',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       apiKey: 'k',
       fetch: stub,
     });
@@ -162,6 +172,7 @@ describe('the embedding adapter', () => {
     const embedder = new OpenAiCompatibleEmbedder({
       model: 'test',
       baseUrl: 'https://api.example.test/v1',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       apiKey: 'k',
       fetch: stub,
     });
@@ -175,6 +186,7 @@ describe('the embedding adapter', () => {
         new OpenAiCompatibleEmbedder({
           model: 'test',
           baseUrl: 'https://api.example.test/v1',
+          dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
           apiKeyEnv: 'WHATEVER_WE_CALL_IT',
         }),
     ).toThrow(/WHATEVER_WE_CALL_IT/);

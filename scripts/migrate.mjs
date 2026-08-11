@@ -66,8 +66,35 @@ async function appliedVersions(client) {
   return new Set(rows.map((row) => row.version));
 }
 
+/**
+ * How wide the embedding column is, from the deployment's own model config.
+ *
+ * The one number in the schema that belongs to a vendor rather than to us:
+ * OpenAI returns 1536, Voyage and Cohere and Mistral 1024, a local nomic 768.
+ * Writing any of them into the migration would make the schema choose the
+ * vendor, so the migration says `${EMBEDDING_DIMENSIONS}` and this fills it in.
+ *
+ * Read from config/models.json when it is there. A deployment that has not
+ * created that file yet still migrates, on the default — the tables have to
+ * exist before anything can be configured.
+ */
+async function embeddingDimensions() {
+  const fallback = 1536;
+  try {
+    const raw = await readFile(join(MIGRATIONS_DIR, '..', 'config', 'models.json'), 'utf8');
+    const declared = JSON.parse(raw)?.embedding?.dimensions;
+    return Number.isInteger(declared) && declared > 0 ? declared : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 async function runMigration(client, migration, direction) {
-  const sql = await readFile(migration[direction], 'utf8');
+  const raw = await readFile(migration[direction], 'utf8');
+  // Substituted rather than templated in general: exactly one placeholder
+  // exists, and a migration runner that interpolates freely is a migration
+  // runner that can be made to run something else.
+  const sql = raw.replaceAll('${EMBEDDING_DIMENSIONS}', String(await embeddingDimensions()));
 
   await client.query('BEGIN');
   try {

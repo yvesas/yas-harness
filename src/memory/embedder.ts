@@ -18,12 +18,21 @@
  * time is a corpus half-embedded with two incompatible models.
  */
 
-/** What every chunk in the corpus must agree on. */
-export const EMBEDDING_DIMENSIONS = 1536;
+/**
+ * What a deployment gets if it declares nothing.
+ *
+ * A default, not a law: the number belongs to the model somebody chose, and
+ * vendors disagree — 1536 at OpenAI, 1024 at Voyage, Cohere and Mistral, 768
+ * for a local nomic. It is declared in `config/models.json` and reaches the
+ * `vector(N)` column when the migration runs.
+ */
+export const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
 
 export interface Embedder {
   /** The model's name, recorded so a corpus can say what embedded it. */
   readonly model: string;
+  /** What this model returns per passage, and what the column must hold. */
+  readonly dimensions: number;
   /**
    * Embed a batch, in order. The result is parallel to the input — a caller
    * pairs them by index, so an adapter must never drop or reorder.
@@ -77,13 +86,18 @@ export class EmbeddingError extends Error {
  * be about a column. This one is about the model, which is the thing that has
  * to change.
  */
-export function assertDimensions(model: string, vectors: readonly number[][]): void {
+export function assertDimensions(
+  model: string,
+  vectors: readonly number[][],
+  expected: number,
+): void {
   for (const vector of vectors) {
-    if (vector.length !== EMBEDDING_DIMENSIONS) {
+    if (vector.length !== expected) {
       throw new EmbeddingError(
-        `"${model}" produced ${String(vector.length)} dimensions; this schema stores ${String(
-          EMBEDDING_DIMENSIONS,
-        )}. Either use a model of that size, or change the vector column in migration 0012 and re-embed everything.`,
+        `"${model}" produced ${String(vector.length)} dimensions; this deployment stores ` +
+          `${String(expected)}. Set "dimensions": ${String(vector.length)} in the embedding block ` +
+          `of config/models.json and migrate again — which re-creates the column, so anything ` +
+          `already indexed has to be indexed again. Vectors from two models are not comparable.`,
         { model, retryable: false },
       );
     }

@@ -75,6 +75,7 @@ export class KeyedEmbedderFactory implements EmbedderFactory {
     return new OpenAiCompatibleEmbedder({
       model: this.#entry.model,
       baseUrl: this.#entry.baseUrl,
+      dimensions: this.#entry.dimensions,
       // Passed as a value either way: which one it is has already been decided
       // above, and handing the adapter a variable name to read again would put
       // the decision in two places.

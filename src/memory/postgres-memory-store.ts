@@ -151,7 +151,7 @@ export class PostgresMemoryStore implements MemoryStore {
     }
     const embedder = await this.#embedders.for(input.tenantId);
     const vectors = await embedder.embed(pieces);
-    assertDimensions(embedder.model, vectors);
+    assertDimensions(embedder.model, vectors, embedder.dimensions);
 
     const client = await this.#pool.connect();
     try {

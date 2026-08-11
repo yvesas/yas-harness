@@ -18,7 +18,10 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { EMBEDDING_DIMENSIONS, fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
+import { fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
+
+/** Matches the column this deployment migrated to. */
+const DIMENSIONS = 1024;
 import { PostgresMemoryStore } from '../../src/memory/postgres-memory-store.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
@@ -31,13 +34,14 @@ const DATABASE_URL = process.env['DATABASE_URL'];
  * distance is then 0 or 1, and a ranking assertion is exact.
  */
 function oneHot(text: string): number[] {
-  const vector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
-  vector[text.trim().toLowerCase().charCodeAt(0) % EMBEDDING_DIMENSIONS] = 1;
+  const vector = new Array<number>(DIMENSIONS).fill(0);
+  vector[text.trim().toLowerCase().charCodeAt(0) % DIMENSIONS] = 1;
   return vector;
 }
 
 class StubEmbedder implements Embedder {
   readonly model = 'stub';
+  readonly dimensions = DIMENSIONS;
   calls = 0;
 
   embed(texts: readonly string[]): Promise<number[][]> {

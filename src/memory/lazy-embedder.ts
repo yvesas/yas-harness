@@ -18,11 +18,13 @@ import type { Embedder } from './embedder.js';
 
 export class LazyEmbedder implements Embedder {
   readonly model: string;
+  readonly dimensions: number;
   readonly #build: () => Embedder;
   #embedder: Embedder | null = null;
 
-  constructor(model: string, build: () => Embedder) {
+  constructor(model: string, dimensions: number, build: () => Embedder) {
     this.model = model;
+    this.dimensions = dimensions;
     this.#build = build;
   }
 

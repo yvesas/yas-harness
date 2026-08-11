@@ -140,6 +140,31 @@ export const embeddingProviderSchema = z.object({
    */
   provider: z.string().min(1).default('embedding'),
   /**
+   * How many numbers this model returns per passage.
+   *
+   * Configuration rather than a constant, because it is a property of the model
+   * somebody chose and every vendor picks differently — 1536 at OpenAI, 1024 at
+   * Voyage, Cohere and Mistral, 768 for a local nomic. Hard-coding one would
+   * make the schema pick the vendor, which is the one thing this file exists to
+   * avoid.
+   *
+   * It reaches the database: `memory_chunks.embedding` is declared `vector(N)`
+   * with this N, substituted when the migration runs. **Changing it after
+   * anything is indexed means re-embedding the corpus** — vectors from two
+   * models are not comparable, so there is nothing to convert.
+   */
+  dimensions: z.number().int().min(1).max(16_000).default(1536),
+  /**
+   * Whether this provider wants to be told a document from a question.
+   *
+   * Voyage and Cohere both take `input_type` and both retrieve measurably
+   * better with it; OpenAI has no such field and refuses parameters it does not
+   * know. So it is declared rather than guessed -- guessing would mean this
+   * file knowing which vendor is behind a base URL, which is the one thing it
+   * must not know.
+   */
+  inputType: z.boolean().default(false),
+  /**
    * The environment variable holding the platform's key, when there is one.
    *
    * Optional, and that is the point: a deployment where every tenant brings

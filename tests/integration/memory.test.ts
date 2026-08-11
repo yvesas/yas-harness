@@ -18,10 +18,30 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { EMBEDDING_DIMENSIONS, fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
+import { fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
 import { PostgresMemoryStore } from '../../src/memory/postgres-memory-store.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
+
+/**
+ * How wide the column actually is, asked of the database.
+ *
+ * Not a constant, because the width is a deployment's own choice now — it comes
+ * from `embedding.dimensions` and differs per vendor. A number written here
+ * would pass on the machine it was written on and fail on every other, which is
+ * exactly what it did.
+ *
+ * Asking also earns something: a stub whose vectors fit proves the migration
+ * substituted the declared number, which nothing else checks.
+ */
+async function columnDimensions(pool: pg.Pool): Promise<number> {
+  const { rows } = await pool.query<{ dimensions: number }>(
+    `SELECT atttypmod AS dimensions
+       FROM pg_attribute
+      WHERE attrelid = 'memory_chunks'::regclass AND attname = 'embedding'`,
+  );
+  return rows[0]!.dimensions;
+}
 
 /**
  * Vectors that make distance predictable.
@@ -30,9 +50,9 @@ const DATABASE_URL = process.env['DATABASE_URL'];
  * "apple" and "avocado" are identical and "zebra" is orthogonal to both. Cosine
  * distance is then 0 or 1, and a ranking assertion is exact.
  */
-function oneHot(text: string): number[] {
-  const vector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
-  vector[text.trim().toLowerCase().charCodeAt(0) % EMBEDDING_DIMENSIONS] = 1;
+function oneHot(text: string, dimensions: number): number[] {
+  const vector = new Array<number>(dimensions).fill(0);
+  vector[text.trim().toLowerCase().charCodeAt(0) % dimensions] = 1;
   return vector;
 }
 
@@ -40,9 +60,11 @@ class StubEmbedder implements Embedder {
   readonly model = 'stub';
   calls = 0;
 
+  constructor(readonly dimensions: number) {}
+
   embed(texts: readonly string[]): Promise<number[][]> {
     this.calls += 1;
-    return Promise.resolve(texts.map(oneHot));
+    return Promise.resolve(texts.map((text) => oneHot(text, this.dimensions)));
   }
 }
 
@@ -52,9 +74,11 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
   let store: PostgresMemoryStore;
   let tenantA: string;
   let tenantB: string;
+  let dimensions: number;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     pool = new pg.Pool({ connectionString: DATABASE_URL });
+    dimensions = await columnDimensions(pool);
   });
 
   afterAll(async () => {
@@ -66,7 +90,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
     await pool.query('DELETE FROM tenants WHERE slug LIKE $1', ['mem-%']);
     tenantA = await createTenant(pool, 'mem-a');
     tenantB = await createTenant(pool, 'mem-b');
-    embedder = new StubEmbedder();
+    embedder = new StubEmbedder(dimensions);
     store = new PostgresMemoryStore(pool, fixedEmbedder(embedder));
   });
 

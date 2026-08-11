@@ -19,7 +19,7 @@ import type { ConnectionStore } from '../../src/connections/connection-store.js'
 import { chunk } from '../../src/memory/chunking.js';
 import {
   assertDimensions,
-  EMBEDDING_DIMENSIONS,
+  DEFAULT_EMBEDDING_DIMENSIONS,
   EmbeddingError,
 } from '../../src/memory/embedder.js';
 import { OpenAiCompatibleEmbedder } from '../../src/memory/openai-compatible-embedder.js';
@@ -82,18 +82,26 @@ describe('cutting a document into chunks', () => {
   });
 });
 
-describe('the embedding dimension is part of the schema', () => {
-  it('rejects a model whose output is the wrong size, naming the fix', () => {
+describe('the embedding dimension a deployment declared', () => {
+  it('rejects a model whose output is the wrong size, naming the number to set', () => {
     // The database would reject it too, and the message would be about a
-    // column. This one is about the model, which is the thing to change.
+    // column. This one names the model, the size it actually returned, and the
+    // line to change — because "vector(1024) expected 1536" tells somebody
+    // nothing about which of their two choices was wrong.
     expect(() => {
-      assertDimensions('some-model', [[1, 2, 3]]);
-    }).toThrow(/some-model.*3 dimensions.*migration 0012/s);
+      assertDimensions('some-model', [[1, 2, 3]], DEFAULT_EMBEDDING_DIMENSIONS);
+    }).toThrow(/some-model.*3 dimensions.*"dimensions": 3.*config\/models\.json/s);
   });
 
-  it('accepts one of the right size', () => {
+  it('accepts one of the size that deployment declared, whatever it is', () => {
+    // 1024 is Voyage, Cohere and Mistral; 1536 is OpenAI; 768 a local nomic.
+    // None of them is more correct than the others, which is why the number is
+    // configuration rather than a constant.
     expect(() => {
-      assertDimensions('good', [new Array<number>(EMBEDDING_DIMENSIONS).fill(0)]);
+      assertDimensions('voyage', [new Array<number>(1024).fill(0)], 1024);
+    }).not.toThrow();
+    expect(() => {
+      assertDimensions('openai', [new Array<number>(1536).fill(0)], 1536);
     }).not.toThrow();
   });
 });
@@ -115,7 +123,7 @@ function endpoint(answer: (input: string[]) => unknown) {
 }
 
 function vector(seed: number): number[] {
-  return new Array<number>(EMBEDDING_DIMENSIONS).fill(seed);
+  return new Array<number>(DEFAULT_EMBEDDING_DIMENSIONS).fill(seed);
 }
 
 describe('the embedding adapter', () => {
@@ -126,12 +134,13 @@ describe('the embedding adapter', () => {
     const embedder = new OpenAiCompatibleEmbedder({
       model: 'test',
       baseUrl: 'https://api.example.test/v1',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       apiKey: 'k',
       batchSize: 2,
       fetch: stub,
     });
 
-    const vectors = await embedder.embed(['a', 'b', 'c']);
+    const vectors = await embedder.embed(['a', 'b', 'c'], 'document');
 
     expect(requests).toEqual([['a', 'b'], ['c']]);
     expect(vectors).toHaveLength(3);
@@ -145,11 +154,12 @@ describe('the embedding adapter', () => {
     const embedder = new OpenAiCompatibleEmbedder({
       model: 'test',
       baseUrl: 'https://api.example.test/v1',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       apiKey: 'k',
       fetch: stub,
     });
 
-    const vectors = await embedder.embed(['a', 'b']);
+    const vectors = await embedder.embed(['a', 'b'], 'document');
 
     // Callers pair by position, so an adapter that trusted arrival order would
     // attach every vector to the wrong chunk.
@@ -162,11 +172,12 @@ describe('the embedding adapter', () => {
     const embedder = new OpenAiCompatibleEmbedder({
       model: 'test',
       baseUrl: 'https://api.example.test/v1',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       apiKey: 'k',
       fetch: stub,
     });
 
-    await expect(embedder.embed(['a', 'b'])).rejects.toBeInstanceOf(EmbeddingError);
+    await expect(embedder.embed(['a', 'b'], 'document')).rejects.toBeInstanceOf(EmbeddingError);
   });
 
   it('names the variable a deployment chose when the key is missing', () => {
@@ -175,6 +186,7 @@ describe('the embedding adapter', () => {
         new OpenAiCompatibleEmbedder({
           model: 'test',
           baseUrl: 'https://api.example.test/v1',
+          dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
           apiKeyEnv: 'WHATEVER_WE_CALL_IT',
         }),
     ).toThrow(/WHATEVER_WE_CALL_IT/);
@@ -288,5 +300,62 @@ describe('a memory grant becomes a tool', () => {
     expect(result.content).toContain('Onboarding');
     expect(result.content).toContain('https://wiki.test/1');
     expect(result.content).toContain('the passage');
+  });
+});
+
+describe('telling a document from a question', () => {
+  /** Captures the body an embedder actually sent. */
+  function spy() {
+    const bodies: Record<string, unknown>[] = [];
+    const fetch = ((_url: unknown, init?: RequestInit) => {
+      // The adapter always sends a JSON string; anything else is a bug this
+      // helper should surface rather than stringify into nonsense.
+      const body = init?.body;
+      if (typeof body !== 'string') {
+        throw new TypeError('the embedder sent something that is not a JSON string');
+      }
+      bodies.push(JSON.parse(body) as Record<string, unknown>);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              { index: 0, embedding: new Array<number>(DEFAULT_EMBEDDING_DIMENSIONS).fill(0) },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+    }) as typeof globalThis.fetch;
+    return { bodies, fetch };
+  }
+
+  const base = {
+    model: 'test',
+    baseUrl: 'https://api.example.test/v1',
+    dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+    apiKey: 'k',
+  };
+
+  it('says which it is, when the deployment says the provider takes it', async () => {
+    // Measured against Voyage on this repository's own corpus: a matching pair
+    // sat at cosine 0.628 without this and 0.399 with it — either side of the
+    // 0.6 ceiling, so it is the difference between found and missed.
+    const { bodies, fetch } = spy();
+    const embedder = new OpenAiCompatibleEmbedder({ ...base, inputType: true, fetch });
+
+    await embedder.embed(['a passage'], 'document');
+    await embedder.embed(['a question?'], 'query');
+
+    expect(bodies[0]?.['input_type']).toBe('document');
+    expect(bodies[1]?.['input_type']).toBe('query');
+  });
+
+  it('says nothing by default, because OpenAI refuses what it does not know', async () => {
+    const { bodies, fetch } = spy();
+    const embedder = new OpenAiCompatibleEmbedder({ ...base, fetch });
+
+    await embedder.embed(['a passage'], 'document');
+
+    expect(bodies[0]).not.toHaveProperty('input_type');
   });
 });

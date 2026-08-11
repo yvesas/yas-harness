@@ -778,7 +778,11 @@ export type { KeyedEmbedderOptions } from './memory/keyed-embedder-factory.js';
 export { fixedEmbedder } from './memory/embedder.js';
 export type { EmbedderFactory } from './memory/embedder.js';
 export { chunk } from './memory/chunking.js';
-export { assertDimensions, EMBEDDING_DIMENSIONS, EmbeddingError } from './memory/embedder.js';
+export {
+  assertDimensions,
+  DEFAULT_EMBEDDING_DIMENSIONS,
+  EmbeddingError,
+} from './memory/embedder.js';
 export type { Embedder } from './memory/embedder.js';
 export { DEFAULT_MAX_DISTANCE, DEFAULT_SEARCH_LIMIT, MemoryError } from './memory/memory-store.js';
 export type {

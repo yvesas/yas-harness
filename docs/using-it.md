@@ -228,6 +228,36 @@ Give that model its own ceiling in `config/models.json`:
 It belongs to the model rather than the provider because it depends on your
 account's tier, and two models behind one key rarely share a limit.
 
+**Your embedding vendor decides two numbers you have to write down.** The
+`embedding` block in `config/models.json` needs more than a model name:
+
+```json
+"embedding": {
+  "model": "voyage-3.5",
+  "baseUrl": "https://api.voyageai.com/v1",
+  "provider": "embedding",
+  "dimensions": 1024,
+  "inputType": true
+}
+```
+
+`dimensions` is how many numbers that model returns — 1536 at OpenAI, 1024 at
+Voyage, Cohere and Mistral, 768 for a local nomic. It reaches the database:
+`memory_chunks.embedding` is `vector(N)` with this N. **Changing it after
+anything is indexed means indexing it again**, because vectors from two models
+describe different spaces and there is no arithmetic that converts one to the
+other. The documents survive; only the passages are rebuilt.
+
+`inputType` says whether the provider wants to be told a passage from a
+question. Voyage and Cohere do; OpenAI has no such field and refuses parameters
+it does not know, so it is off unless you turn it on. It is not cosmetic — with
+Voyage, a matching pair in this repository's own corpus sat at cosine **0.628**
+without it and **0.399** with it, either side of the 0.6 ceiling. That is a
+passage found rather than missed.
+
+If a search that obviously should match returns nothing, this is the first
+thing to check.
+
 **A small model will invent tool names.** An 8B-class model asked to use tools
 sometimes calls one that was never offered, and a strict provider rejects the
 turn outright:

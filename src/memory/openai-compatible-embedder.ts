@@ -13,11 +13,28 @@
 
 import { trimTrailingSlashes } from '../http/base-url.js';
 
-import { assertDimensions, EmbeddingError, type Embedder } from './embedder.js';
+import {
+  assertDimensions,
+  EmbeddingError,
+  type Embedder,
+  type EmbeddingPurpose,
+} from './embedder.js';
 
 export interface OpenAiCompatibleEmbedderOptions {
   readonly model: string;
   readonly baseUrl: string;
+  /** What this model returns per passage; checked before anything is stored. */
+  readonly dimensions: number;
+  /**
+   * Whether the provider wants to be told a document from a question.
+   *
+   * Off by default, because it is not in the OpenAI shape this adapter is named
+   * after and OpenAI refuses parameters it does not know. Voyage and Cohere
+   * both take `input_type` and both retrieve measurably better with it — on
+   * this repository's own corpus a matching pair moved from cosine 0.628 to
+   * 0.399, either side of the default 0.6 ceiling.
+   */
+  readonly inputType?: boolean;
   readonly apiKeyEnv?: string;
   readonly apiKey?: string;
   /** Texts per request. Providers cap this; 64 is under every cap in reach. */
@@ -34,6 +51,8 @@ interface EmbeddingResponse {
 
 export class OpenAiCompatibleEmbedder implements Embedder {
   readonly model: string;
+  readonly dimensions: number;
+  readonly #inputType: boolean;
   readonly #baseUrl: string;
   readonly #apiKey: string;
   readonly #batch: number;
@@ -41,6 +60,8 @@ export class OpenAiCompatibleEmbedder implements Embedder {
 
   constructor(options: OpenAiCompatibleEmbedderOptions) {
     this.model = options.model;
+    this.dimensions = options.dimensions;
+    this.#inputType = options.inputType ?? false;
     this.#baseUrl = trimTrailingSlashes(options.baseUrl);
     const key = options.apiKey ?? (options.apiKeyEnv ? process.env[options.apiKeyEnv] : undefined);
     if (!key) {
@@ -54,16 +75,16 @@ export class OpenAiCompatibleEmbedder implements Embedder {
     this.#fetch = options.fetch ?? globalThis.fetch;
   }
 
-  async embed(texts: readonly string[]): Promise<number[][]> {
+  async embed(texts: readonly string[], purpose: EmbeddingPurpose): Promise<number[][]> {
     const vectors: number[][] = [];
     for (let start = 0; start < texts.length; start += this.#batch) {
-      vectors.push(...(await this.#batchEmbed(texts.slice(start, start + this.#batch))));
+      vectors.push(...(await this.#batchEmbed(texts.slice(start, start + this.#batch), purpose)));
     }
-    assertDimensions(this.model, vectors);
+    assertDimensions(this.model, vectors, this.dimensions);
     return vectors;
   }
 
-  async #batchEmbed(batch: readonly string[]): Promise<number[][]> {
+  async #batchEmbed(batch: readonly string[], purpose: EmbeddingPurpose): Promise<number[][]> {
     let response: Response;
     try {
       response = await this.#fetch(`${this.#baseUrl}/embeddings`, {
@@ -72,7 +93,13 @@ export class OpenAiCompatibleEmbedder implements Embedder {
           authorization: `Bearer ${this.#apiKey}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ model: this.model, input: batch }),
+        body: JSON.stringify({
+          model: this.model,
+          input: batch,
+          // Sent only when the deployment said its provider takes it: the
+          // OpenAI shape has no such field and rejects what it does not know.
+          ...(this.#inputType ? { input_type: purpose } : {}),
+        }),
       });
     } catch (error) {
       throw new EmbeddingError(

@@ -60,18 +60,18 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.2",
-    "@types/pg": "^8.20.3",
-    "eslint": "^10.8.0",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.21.0",
+    "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.0.1",
     "prettier": "^3.9.6",
-    "tsx": "^4.19.2",
+    "tsx": "^4.23.11",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.22.0",
+    "typescript-eslint": "^8.66.0",
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/sdk": "^0.116.0",
     "gpt-tokenizer": "^3.4.0",
     "pg": "^8.22.0",
     "zod": "^4.4.3"

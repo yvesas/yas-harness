@@ -113,6 +113,30 @@ describe('GitHubConnector', () => {
     expect(connector.capabilities).not.toContain('delete');
   });
 
+  it('declares the union of what its kinds can do, and nothing more', () => {
+    connect(() => []);
+    // Derived from the kind table rather than written down, so a kind that
+    // gains or loses an operation cannot leave this claim behind.
+    expect(connector.capabilities).toEqual(['list', 'read', 'search', 'create', 'update']);
+  });
+
+  it('refuses a cursor it did not mint, rather than asking GitHub about NaN', async () => {
+    connect(() => []);
+
+    await expect(connector.list(ctx, { cursor: 'not-a-page' })).rejects.toThrowError(
+      /invalid cursor/,
+    );
+    expect(calls).toEqual([]); // nothing went out
+  });
+
+  it('treats a type it does not know as an issue', async () => {
+    connect(({ path }) => (path === '/issues' ? [issue(1, 'Mine')] : undefined));
+
+    const page = await connector.list(ctx, { type: 'wat' });
+
+    expect(page.resources[0]).toMatchObject({ type: 'issue', title: 'Mine' });
+  });
+
   it('reads an issue, mapping the Markdown body and building an owner/repo#number id', async () => {
     connect(({ path }) =>
       path === '/repos/acme/widgets/issues/7'

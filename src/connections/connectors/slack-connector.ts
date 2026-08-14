@@ -35,6 +35,8 @@ import type {
 import { ConnectorError, ResourceNotFoundError } from '../connector.js';
 import { isOAuthToken } from '../oauth.js';
 
+import { pageNumber } from './page-cursor.js';
+
 const CONNECTOR_ID = 'slack';
 const SLACK_API = 'https://slack.com/api';
 const DEFAULT_LIMIT = 25;
@@ -119,7 +121,7 @@ export class SlackConnector implements Connector {
     query: string,
     options: SearchOptions = {},
   ): Promise<ResourcePage> {
-    const page = options.cursor ? Number(options.cursor) : 1;
+    const page = pageNumber(options.cursor, CONNECTOR_ID);
     const count = options.limit ?? DEFAULT_LIMIT;
     const body = await this.#get<{
       messages?: {

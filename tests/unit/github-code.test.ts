@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ConnectorContext } from '../../src/connections/connector.js';
-import { ResourceNotFoundError } from '../../src/connections/connector.js';
+import { ConnectorError, ResourceNotFoundError } from '../../src/connections/connector.js';
 import { GitHubConnector } from '../../src/connections/connectors/github-connector.js';
 import type { OAuthToken } from '../../src/connections/oauth.js';
 
@@ -248,6 +248,28 @@ describe('GitHubConnector — code', () => {
     await expect(connector.read(ctx, 'code:acme')).rejects.toThrowError(
       /expected "code:owner\/repo:path"/,
     );
+  });
+
+  it('refuses to update a code id, saying code is read-only', async () => {
+    connect(() => undefined);
+
+    // Not "expected owner/repo#number": the id was right, the operation is not.
+    await expect(
+      connector.update(ctx, 'code:acme/widgets:a.txt', { content: 'new' }),
+    ).rejects.toThrowError(/read-only/);
+    await expect(
+      connector.update(ctx, 'code:acme/widgets:a.txt', { content: 'new' }),
+    ).rejects.toBeInstanceOf(ConnectorError);
+    expect(calls).toEqual([]); // refused before any request went out
+  });
+
+  it('refuses to create a code resource rather than opening an issue', async () => {
+    connect(() => undefined);
+
+    await expect(
+      connector.create(ctx, { title: 'a.txt', type: 'code', content: 'hi' }),
+    ).rejects.toThrowError(/read-only/);
+    expect(calls).toEqual([]);
   });
 
   it('routes code ids to the contents API, not the issues endpoint', async () => {

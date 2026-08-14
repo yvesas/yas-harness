@@ -10,6 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import type { Approval } from '../../src/approval/approval-store.js';
 import { InMemoryApprovalStore } from '../../src/approval/in-memory-approval-store.js';
 import { Agent } from '../../src/core/agent.js';
 import { parsePersona } from '../../src/core/persona.js';
@@ -252,7 +253,43 @@ describe('Agent with approval', () => {
     expect(reply.toolInvocations[0]?.isError).toBe(true);
     expect(reply.toolInvocations[0]?.output).toContain('requires human approval');
   });
+
+  it('reads the decisions once when it settles an approved turn', async () => {
+    // The read that decided whether to pause is the read the turn then runs on.
+    // Asking again is a round trip that can only return the same rows, and it
+    // happens on the hot path of every product with approval wired.
+    const counting = new CountingApprovalStore();
+    const gateway = new ScriptedGateway([
+      callsTool('delete_file', { path: '/tmp/x' }),
+      says('Done, the file is gone.'),
+    ]);
+    const agent = new Agent({ gateway, sessions, tools: tools(), persona, approvals: counting });
+    const sessionId = await newSession();
+
+    const paused = await agent.run({ tenantId: TENANT, sessionId, input: 'delete it' });
+    await counting.approve(TENANT, paused.pendingApprovals![0]!.id, { decidedBy: 'yves' });
+    counting.reads = 0; // count the resume only
+
+    await agent.resume({ tenantId: TENANT, sessionId });
+
+    expect(ran).toEqual(['delete_file:/tmp/x']);
+    expect(counting.reads).toBe(1);
+  });
 });
+
+/** The in-memory store, counting how often the agent reads decisions back. */
+class CountingApprovalStore extends InMemoryApprovalStore {
+  reads = 0;
+
+  override forToolCalls(
+    tenantId: string,
+    sessionId: string,
+    toolCallIds: readonly string[],
+  ): Promise<Approval[]> {
+    this.reads += 1;
+    return super.forToolCalls(tenantId, sessionId, toolCallIds);
+  }
+}
 
 function reqOf(approvalsList: { toolName: string }[]): string[] {
   return approvalsList.map((a) => a.toolName);

@@ -441,6 +441,13 @@ export class Agent {
     invocations: ToolInvocation[],
   ): Promise<Settlement> {
     const gated = calls.filter((call) => ctx.scope.tools.requiresApproval(call.name));
+    // Empty when nothing is gated, or when nothing can decide — either way, the
+    // loop below finds no decision and `#runCall` fails the call closed.
+    //
+    // It lives out here rather than inside the branch because the branch has
+    // already read every decision this turn needs: reaching the loop means no
+    // gate is pending, so a second read could only return what this map holds.
+    const decisions = new Map<string, Approval>();
 
     if (gated.length > 0 && this.#approvals) {
       const existing = await this.#approvals.forToolCalls(
@@ -448,10 +455,10 @@ export class Agent {
         ctx.sessionId,
         gated.map((call) => call.id),
       );
-      const byToolCall = new Map(existing.map((approval) => [approval.toolCallId, approval]));
+      for (const approval of existing) decisions.set(approval.toolCallId, approval);
 
       // First time we see this turn: record the pending approvals and pause.
-      const missing = gated.filter((call) => !byToolCall.has(call.id));
+      const missing = gated.filter((call) => !decisions.has(call.id));
       if (missing.length > 0) {
         const created = await this.#approvals.request(
           missing.map((call) => ({
@@ -462,10 +469,10 @@ export class Agent {
             input: call.input,
           })),
         );
-        for (const approval of created) byToolCall.set(approval.toolCallId, approval);
+        for (const approval of created) decisions.set(approval.toolCallId, approval);
       }
 
-      const stillPending = [...byToolCall.values()].filter((a) => a.status === 'pending');
+      const stillPending = [...decisions.values()].filter((a) => a.status === 'pending');
       if (stillPending.length > 0) {
         await ctx.trace.step({
           kind: 'approval',
@@ -478,18 +485,6 @@ export class Agent {
 
     // Every gate is decided (or there were none): run the turn.
     const results: ToolResultPart[] = [];
-    const decisions =
-      gated.length > 0 && this.#approvals
-        ? new Map(
-            (
-              await this.#approvals.forToolCalls(
-                ctx.tenantId,
-                ctx.sessionId,
-                gated.map((call) => call.id),
-              )
-            ).map((approval) => [approval.toolCallId, approval]),
-          )
-        : new Map<string, Approval>();
 
     for (const call of calls) {
       const startedAt = performance.now();

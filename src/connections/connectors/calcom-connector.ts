@@ -35,6 +35,8 @@ import type {
 import { ConnectorError, ResourceNotFoundError } from '../connector.js';
 import { isOAuthToken } from '../oauth.js';
 
+import { startOffset } from './page-cursor.js';
+
 const CONNECTOR_ID = 'calcom';
 const CALCOM_API = 'https://api.cal.com/v2';
 const DEFAULT_LIMIT = 25;
@@ -353,7 +355,7 @@ function page<T>(
   toResource: (item: T) => Resource,
 ): ResourcePage {
   const take = options.limit ?? DEFAULT_LIMIT;
-  const skip = options.cursor ? Number(options.cursor) : 0;
+  const skip = startOffset(options.cursor, CONNECTOR_ID);
   const list = items ?? [];
   return {
     resources: list.map(toResource),

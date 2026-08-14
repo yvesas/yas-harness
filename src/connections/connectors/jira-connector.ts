@@ -27,6 +27,7 @@ import type {
 import { ConnectorError, ResourceNotFoundError } from '../connector.js';
 
 import { AtlassianNotFound, AtlassianSite } from './atlassian-site.js';
+import { startOffset } from './page-cursor.js';
 
 const CONNECTOR_ID = 'jira';
 const DEFAULT_LIMIT = 25;
@@ -156,7 +157,7 @@ export class JiraConnector implements Connector {
     cursor: string | undefined,
     limit = DEFAULT_LIMIT,
   ): Promise<ResourcePage> {
-    const startAt = cursor ? Number(cursor) : 0;
+    const startAt = startOffset(cursor, CONNECTOR_ID);
     const params = new URLSearchParams({
       jql,
       fields: FIELDS,

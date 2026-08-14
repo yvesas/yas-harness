@@ -675,6 +675,14 @@ ADR instead.
   must not undo the decision to salvage the turn. The port has one method on
   purpose: a failure worth acting on is thrown and a step worth reading is a
   trace, so `warn` is the whole of what is left.
+- **A numeric cursor is validated where it is decoded.** GitHub and Slack
+  paginate by page number, Jira and Cal.com by record offset, and all four
+  turned `options.cursor` into a number with nothing checking it — so a cursor
+  that was not ours became `NaN` and went out in a query string for the source
+  to make of what it would. `pageNumber` and `startOffset` refuse anything that
+  is not a whole number at or above their floor, naming the connector that was
+  asked. A cursor a connector minted always parses; one that does not came from
+  somewhere else, and saying so is more useful than a request nobody meant.
 - **Compression is wired into the gateway, but a product turns it on (E5.5).**
   `RoutedGateway` takes an optional `ContextCompressor` and, when given one,
   compresses **once before the fallback chain** — every candidate then gets the
@@ -760,6 +768,21 @@ ADR instead.
   login, not a repo. A tiny GraphQL client (`github-graphql.ts`) is the shared
   GraphQL transport, mapping a `NOT_FOUND` error to a missing resource like a
   REST 404.
+- **Each GitHub kind is its own module; the connector only routes.** The four
+  kinds share a token and a resource shape and share nothing else — two APIs,
+  four id formats, four different answers to what "create" means. Holding them
+  in one class meant the same prefix/type dispatch written out in `list`, `read`,
+  `create` and `update`, each with a *different* subset of kinds, which is
+  exactly how a write against a `code:` id came to answer `expected
+  "owner/repo#number"`. So a kind now implements `GitHubKind` (the `Connector`
+  contract minus id and description, one level down) and declares its own
+  capabilities; `GitHubConnector` picks the kind by id prefix or by
+  `type` and refuses, from that same table, anything the kind does not declare.
+  The connector's `capabilities` is the **union** of its kinds', computed rather
+  than written down, so a kind that gains or loses an operation cannot leave the
+  declaration behind. Transport (REST + GraphQL + the credential) moved to one
+  `GitHubApi`, which is why a kind never sees a token. A fifth kind is a new
+  module and one entry in the table, with nothing existing edited.
 - **Projects resolve user-vs-org in a single query via `ProjectV2Owner`.** A
   project's owner may be a user or an organization, and GitHub has no unified
   login-to-projects field on either. Rather than probe both or ask the caller

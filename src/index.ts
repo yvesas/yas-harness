@@ -722,6 +722,8 @@ export { DEFAULT_BREAKDOWN_LIMIT } from './telemetry/model-usage.js';
 export { PostgresUsageRecorder } from './telemetry/postgres-usage-recorder.js';
 export { RedactingUsageRecorder } from './telemetry/redacting-usage-recorder.js';
 export { InMemoryTraceRecorder, TurnTrace } from './telemetry/trace.js';
+export { consoleLogger } from './telemetry/logger.js';
+export type { Logger } from './telemetry/logger.js';
 export { InMemoryTenantStore } from './tenants/in-memory-tenant-store.js';
 export { PostgresTenantStore } from './tenants/postgres-tenant-store.js';
 export { TenantError, assertValidSlug } from './tenants/tenant-store.js';

@@ -13,6 +13,8 @@ import type { ContextCompressor } from '../compression/context-compressor.js';
 import type { Availability, Unavailable } from './availability.js';
 import { InMemoryAvailability, credentialScope, providerScope } from './availability.js';
 import type { SecretRedactor } from '../redaction/secret-redactor.js';
+import type { Logger } from '../telemetry/logger.js';
+import { consoleLogger } from '../telemetry/logger.js';
 import type {
   CompressionUsage,
   ModelUsageRecord,
@@ -41,6 +43,12 @@ export interface RoutedGatewayOptions {
   readonly tenantId?: string;
   /** Scrubs secrets from the one thing this class logs; wired in production. */
   readonly redactor?: SecretRedactor;
+  /**
+   * Where a degraded success is reported — a usage row that did not land, a
+   * compression pass that was skipped. Defaults to a JSON line on the console;
+   * a test passes a fake to assert the warning happened at all.
+   */
+  readonly logger?: Logger;
   /** Injected in tests so backoff does not make the suite slow. */
   readonly sleep?: (ms: number) => Promise<void>;
   /**
@@ -72,6 +80,7 @@ export class RoutedGateway implements ModelGateway {
   readonly #availability: Availability;
   readonly #now: () => Date;
   readonly #modelKeys: ModelKeys | undefined;
+  readonly #logger: Logger;
 
   constructor(options: RoutedGatewayOptions) {
     this.#config = options.config;
@@ -85,6 +94,7 @@ export class RoutedGateway implements ModelGateway {
     this.#availability = options.availability ?? new InMemoryAvailability();
     this.#now = options.now ?? (() => new Date());
     this.#modelKeys = options.modelKeys;
+    this.#logger = options.logger ?? consoleLogger;
 
     // A route pointing at a provider nobody registered is a wiring mistake
     // that would otherwise surface only when that fallback is finally needed.
@@ -268,7 +278,7 @@ export class RoutedGateway implements ModelGateway {
         },
       };
     } catch (error) {
-      console.warn('context compression failed; sending the request uncompressed', {
+      this.#logger.warn('context compression failed; sending the request uncompressed', {
         task: request.task,
         error: this.#redactor.redact(error instanceof Error ? error.message : String(error)),
       });
@@ -380,7 +390,7 @@ export class RoutedGateway implements ModelGateway {
     } catch (error) {
       // Losing a usage row is a billing-visibility problem; failing the user's
       // turn over it would be worse.
-      console.warn('failed to record model usage', {
+      this.#logger.warn('failed to record model usage', {
         model: record.modelReference,
         error: this.#redactor.redact(error instanceof Error ? error.message : String(error)),
       });

@@ -66,21 +66,17 @@ describe('TurnTrace', () => {
   });
 
   it('swallows a recorder failure rather than breaking the turn', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const failing: TraceRecorder = {
-        record: () => Promise.reject(new Error('traces table is gone')),
-      };
-      const trace = new TurnTrace(failing, CONTEXT);
+    const warn = vi.fn();
+    const failing: TraceRecorder = {
+      record: () => Promise.reject(new Error('traces table is gone')),
+    };
+    const trace = new TurnTrace(failing, CONTEXT, { warn });
 
-      await expect(trace.step({ kind: 'input', succeeded: true })).resolves.toBeUndefined();
-      expect(warn).toHaveBeenCalledWith(
-        'failed to record a trace step',
-        expect.objectContaining({ kind: 'input' }),
-      );
-    } finally {
-      warn.mockRestore();
-    }
+    await expect(trace.step({ kind: 'input', succeeded: true })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      'failed to record a trace step',
+      expect.objectContaining({ kind: 'input' }),
+    );
   });
 });
 

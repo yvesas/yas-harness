@@ -663,6 +663,18 @@ ADR instead.
   `traceId` to both `Router.route` and `Agent.run` so the decision and the turn
   it chose read as one trace. Off unless a recorder is wired, and a recorder
   that throws never reaches the turn.
+- **A degraded success is reported through a `Logger` port, not `console`.**
+  Three places swallow a failure on purpose — a lost usage row, a lost trace
+  step, a compression pass that threw — because failing the user's turn would
+  cost more than the visibility does. They said so with a bare `console.warn`,
+  which was the one global dependency left in classes that inject everything
+  else they touch, down to `sleep` and `now`: no test could assert the warning
+  happened, only that the process printed something. So they take a `Logger`,
+  defaulting to `consoleLogger` — one JSON object per line, as the conventions
+  ask, and deliberately unable to throw, since a field that will not serialise
+  must not undo the decision to salvage the turn. The port has one method on
+  purpose: a failure worth acting on is thrown and a step worth reading is a
+  trace, so `warn` is the whole of what is left.
 - **Compression is wired into the gateway, but a product turns it on (E5.5).**
   `RoutedGateway` takes an optional `ContextCompressor` and, when given one,
   compresses **once before the fallback chain** — every candidate then gets the

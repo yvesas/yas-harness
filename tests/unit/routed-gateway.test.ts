@@ -250,31 +250,27 @@ describe('RoutedGateway', () => {
     });
 
     it('redacts secrets from the error it logs when recording fails', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        const gateway = new RoutedGateway({
-          config,
-          providers: [
-            new FakeProvider('groq', () => answer('ok')),
-            new FakeProvider('anthropic', () => answer('unused')),
-          ],
-          recorder: {
-            record: () =>
-              Promise.reject(new Error('write to postgres://user:s3cr3tpass@db failed')),
-          },
-          redactor: new RegexSecretRedactor(),
-          sleep: () => Promise.resolve(),
-        });
+      const warn = vi.fn();
+      const gateway = new RoutedGateway({
+        config,
+        providers: [
+          new FakeProvider('groq', () => answer('ok')),
+          new FakeProvider('anthropic', () => answer('unused')),
+        ],
+        recorder: {
+          record: () => Promise.reject(new Error('write to postgres://user:s3cr3tpass@db failed')),
+        },
+        redactor: new RegexSecretRedactor(),
+        logger: { warn },
+        sleep: () => Promise.resolve(),
+      });
 
-        await gateway.complete(request());
+      await gateway.complete(request());
 
-        expect(warn).toHaveBeenCalledWith(
-          'failed to record model usage',
-          expect.objectContaining({ error: 'write to postgres://[REDACTED]@db failed' }),
-        );
-      } finally {
-        warn.mockRestore();
-      }
+      expect(warn).toHaveBeenCalledWith(
+        'failed to record model usage',
+        expect.objectContaining({ error: 'write to postgres://[REDACTED]@db failed' }),
+      );
     });
   });
 
@@ -287,14 +283,16 @@ describe('RoutedGateway', () => {
     function withCompressor(compressor: ContextCompressor) {
       const recorder = new InMemoryUsageRecorder();
       const provider = new FakeProvider('groq', () => answer('ok'));
+      const warn = vi.fn();
       const gateway = new RoutedGateway({
         config,
         providers: [provider, new FakeProvider('anthropic', () => answer('unused'))],
         recorder,
         compressor,
+        logger: { warn },
         sleep: () => Promise.resolve(),
       });
-      return { gateway, recorder, provider };
+      return { gateway, recorder, provider, warn };
     }
 
     it('sends the compressed request and records what it saved', async () => {
@@ -347,29 +345,24 @@ describe('RoutedGateway', () => {
     });
 
     it('sends the request uncompressed rather than losing the turn to a broken engine', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        const { gateway, recorder, provider } = withCompressor({
-          compress: () => {
-            throw new Error('engine exploded');
-          },
-        });
+      const { gateway, recorder, provider, warn } = withCompressor({
+        compress: () => {
+          throw new Error('engine exploded');
+        },
+      });
 
-        const response = await gateway.complete(padded);
+      const response = await gateway.complete(padded);
 
-        expect(response.model).toBe('ok');
-        // Untouched: the floor for a compression fault is "no change".
-        expect(provider.calls[0]!.request.messages[0]!.content[0]).toMatchObject({
-          text: 'hello   \n\n\n\nworld',
-        });
-        expect(recorder.records[0]!.compression).toBeUndefined();
-        expect(warn).toHaveBeenCalledWith(
-          'context compression failed; sending the request uncompressed',
-          expect.objectContaining({ task: 'simple' }),
-        );
-      } finally {
-        warn.mockRestore();
-      }
+      expect(response.model).toBe('ok');
+      // Untouched: the floor for a compression fault is "no change".
+      expect(provider.calls[0]!.request.messages[0]!.content[0]).toMatchObject({
+        text: 'hello   \n\n\n\nworld',
+      });
+      expect(recorder.records[0]!.compression).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(
+        'context compression failed; sending the request uncompressed',
+        expect.objectContaining({ task: 'simple' }),
+      );
     });
 
     it('counts the untouched cacheable prefix in what the call sent', async () => {

@@ -18,6 +18,9 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { Logger } from './logger.js';
+import { consoleLogger } from './logger.js';
+
 /**
  * The stages of a turn worth seeing. Provider- and product-neutral: a routing
  * decision and a tool call are the same events in a language tutor and a CRM.
@@ -211,11 +214,17 @@ export class TurnTrace {
   readonly #recorder: TraceRecorder | undefined;
   readonly #context: TurnTraceContext;
   readonly #traceId: string;
+  readonly #logger: Logger;
 
-  constructor(recorder: TraceRecorder | undefined, context: TurnTraceContext) {
+  constructor(
+    recorder: TraceRecorder | undefined,
+    context: TurnTraceContext,
+    logger: Logger = consoleLogger,
+  ) {
     this.#recorder = recorder;
     this.#context = context;
     this.#traceId = context.traceId ?? randomUUID();
+    this.#logger = logger;
   }
 
   get traceId(): string {
@@ -237,7 +246,7 @@ export class TurnTrace {
     } catch (error) {
       // Losing a step costs visibility; failing the user's turn over it would
       // cost the turn. The same trade the usage recorder makes.
-      console.warn('failed to record a trace step', {
+      this.#logger.warn('failed to record a trace step', {
         traceId: this.#traceId,
         kind: step.kind,
         error: error instanceof Error ? error.message : String(error),

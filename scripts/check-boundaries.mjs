@@ -39,7 +39,19 @@ const CORE_FORBIDDEN = [
 ];
 
 /**
- * 2. The golden rule: no product domain anywhere in the harness. These words
+ * 2. There is one composition root, and it says so.
+ *
+ *    `create-harness.ts` opens the pool and hands it to every adapter; a
+ *    `postgres-*.ts` adapter receives one. Anything else reaching for the
+ *    driver is a second place that decides how the database is reached, which
+ *    is how a deployment ends up with two pools and one of them unconfigured.
+ */
+const COMPOSITION_ROOT = 'src/create-harness.ts';
+const DRIVER_IMPORT = /from\s+['"]pg['"]/;
+const ADAPTER = /(^|\/)postgres-[^/]+\.ts$/;
+
+/**
+ * 3. The golden rule: no product domain anywhere in the harness. These words
  *    belong to modules, which live in the products that fork this repo.
  */
 const DOMAIN_WORDS = [
@@ -69,6 +81,12 @@ for await (const file of sourceFiles(SRC)) {
     }
   }
 
+  if (DRIVER_IMPORT.test(content) && path !== COMPOSITION_ROOT && !ADAPTER.test(path)) {
+    violations.push(
+      `${path}: only ${COMPOSITION_ROOT} and the postgres-* adapters may import the database driver`,
+    );
+  }
+
   content.split('\n').forEach((line, index) => {
     if (!CODE_LINE.test(line)) return;
     for (const word of DOMAIN_WORDS) {
@@ -88,7 +106,9 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log('boundaries hold: core depends on ports, no product domain in src/');
+console.log(
+  'boundaries hold: core depends on ports, one composition root, no product domain in src/',
+);
 
 async function* sourceFiles(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {

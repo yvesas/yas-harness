@@ -71,7 +71,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.116.0",
+    "@anthropic-ai/sdk": "^0.117.1",
     "gpt-tokenizer": "^3.4.0",
     "pg": "^8.22.0",
     "zod": "^4.4.3"

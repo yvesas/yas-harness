@@ -926,6 +926,18 @@ ADR instead.
 - **Editing is first-class, not read-only-first.** create/update/delete are in
   the contract from the start; the dogfooding case and the products both need
   to write back, and retrofitting write is worse than designing for it once.
+- **The optional methods stay optional; the contract is not split into
+  `Readable` / `Writable`.** Considered and declined. Because `list?()`,
+  `read?()` and the rest are optional, `ConnectionManager` calls them through
+  six non-null assertions (`connector.list!(ctx, options)`), which reads like a
+  gap in the types — it is not. `assertConnectorConsistent` closes it at
+  registration: a connector declaring a capability it does not implement fails
+  when it is registered, not when the operation is first attempted against a
+  live source. Splitting the contract into narrower interfaces would remove the
+  `!` and multiply the interfaces by six, and every caller would then need a
+  type guard to find out what it is holding — a worse trade for a check that
+  already runs. Recorded because the assertions look like an oversight to
+  anyone reading `connection-manager.ts` cold, and the reflex is to "fix" them.
 - **Connected data is cached as `Resource` snapshots, read-through and
   stale-tolerant.** The cache keys on `(tenant_id, connection_id, resource_id)`
   and cascades with its connection, like credentials. `CachedConnections` serves
@@ -1002,6 +1014,23 @@ ADR instead.
 - **Personas are declarative configuration in `config/personas/`**, validated
   with Zod and versioned in Git — so instructions change without touching the
   loop.
+- **`Harness` stays flat; its 30 members are not grouped into facets.**
+  Considered and declined. Grouping them (`harness.observability.traceReader`,
+  `harness.connections.vault`) reads like an Interface Segregation fix, but ISP
+  bites when a client must depend on methods it does not use — and nobody
+  *implements* `Harness`. It is a factory's return value, a bag of already-built
+  adapters, so taking `agent` out of a 30-field object costs a consumer nothing.
+  The argument for facets was that a product could then depend on a narrow
+  slice; `Pick<Harness, 'agent' | 'sessions'>` already does that on the flat
+  shape, and does it better — with facets you would pull a whole facet or nest
+  `Pick`. The cost, meanwhile, is real and lands on whoever reads the API:
+  typing `harness.` and seeing all 30 at once is what a public surface owes its
+  consumer, and several groupings are genuinely ambiguous (does `resourceCache`
+  belong under connections or on its own? is `ContextBroker` pools or
+  orchestration?) — each guess becomes taxonomy every consumer must memorise.
+  The six `| null` members share one condition, `MASTER_ENCRYPTION_KEY`, and
+  that is answered by saying so once at the top of the interface rather than by
+  reshaping it.
 
 ## Toolchain and project
 

@@ -15,5 +15,6 @@ export default {
   // The harness is a workspace dependency compiled to ESM; nothing here needs
   // it bundled, and tracing it keeps `standalone` honest about what it needs.
   outputFileTracingRoot: new URL('..', import.meta.url).pathname,
-  experimental: { typedRoutes: true },
+  // Stable since Next 16.3; it lived under `experimental` until then.
+  typedRoutes: true,
 };

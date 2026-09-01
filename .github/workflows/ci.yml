@@ -138,7 +138,7 @@ jobs:
       # step a broken Dockerfile would stay broken until release day. Single
       # architecture here: this is checking the build, not shipping it.
       - name: Build the image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile

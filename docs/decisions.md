@@ -997,6 +997,28 @@ ADR instead.
 - **"Who decided" is an opaque string.** The harness does not model operators;
   a product binds real identities to `decidedBy` itself.
 
+- **A gated call carries what it would do, not just what it is called.** The
+  queue held the tool name and its arguments, which says *what* was invoked and
+  nothing about the blast radius — a reviewer approving on `send_email` alone is
+  rubber-stamping, and a queue showing only the name has asked them to. So an
+  approval now carries `consequence` (*"sends a real email to 214 recipients"*),
+  `risk` (`none`/`low`/`medium`/`high`, ordering the inbox and never deciding),
+  and `policySource`, so a gate nobody expected can be traced to its rule rather
+  than guessed at. The consequence comes from a **function on the tool**, asked
+  with the arguments of that call, because the radius is in the input — the same
+  tool sends one message or two hundred. A tool that throws while describing
+  itself loses its sentence, never its gate: holding a call with no description
+  beats letting it run unreviewed. Risk defaults to `medium`, since a gated call
+  nobody rated is not thereby a safe one.
+- **`changes_requested` is a decision, not a softer rejection.** A rejection
+  ends the attempt; this says *do it differently* and carries the note back into
+  the turn, which is the answer a reviewer usually has — the action was right
+  and the arguments were not. Without it, asking for a smaller blast radius
+  meant rejecting and hoping the model guessed what to change. The note is
+  **required**, enforced by a `CHECK` rather than by the caller, and the check
+  names the blank as well as the null: an empty textarea posts `''`, which is
+  the likely mistake, and a correction with nothing to correct is a loop.
+
 ## Core and storage
 
 - **Message order is a `seq` identity column, not `created_at`.** `now()` is

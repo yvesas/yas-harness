@@ -165,6 +165,89 @@ describe.skipIf(!DATABASE_URL)('PostgresApprovalStore', () => {
     expect(trail[0]?.reason).toBe('no');
   });
 
+  it('keeps the risk, the sentence and the rule that gated the call', async () => {
+    const [created] = await store.request([
+      {
+        ...req('call-1', 'send_email'),
+        risk: 'high',
+        consequence: 'sends a real email to 214 recipients',
+        policySource: 'tool.requiresApproval',
+      },
+    ]);
+
+    const found = await store.find(tenantA, created!.id);
+
+    // The sentence is the whole point: a reviewer approving on the tool name
+    // alone is rubber-stamping, and `send_email` says nothing about 214.
+    expect(found).toMatchObject({
+      risk: 'high',
+      consequence: 'sends a real email to 214 recipients',
+      policySource: 'tool.requiresApproval',
+    });
+  });
+
+  it('rates a gated call medium when nobody said, rather than safe', async () => {
+    const [created] = await store.request([req('call-1')]);
+
+    expect(created?.risk).toBe('medium');
+    expect(created?.consequence).toBeNull();
+  });
+
+  it('sends a call back for changes, carrying the note to the model', async () => {
+    const [created] = await store.request([req('call-1')]);
+
+    const decided = await store.requestChanges(tenantA, created!.id, {
+      decidedBy: 'yves',
+      reason: 'only the staging bucket, not production',
+    });
+
+    // Not a rejection: the attempt is still alive, the arguments are what was
+    // refused, and the note is what the model needs to try again.
+    expect(decided.status).toBe('changes_requested');
+    expect(decided.reason).toBe('only the staging bucket, not production');
+    expect(decided.decidedBy).toBe('yves');
+  });
+
+  it('refuses to decide twice, whichever decision came first', async () => {
+    const [created] = await store.request([req('call-1')]);
+    await store.requestChanges(tenantA, created!.id, { decidedBy: 'yves', reason: 'narrow it' });
+
+    // The pending guard is in the WHERE clause, so it covers the new status
+    // without knowing about it.
+    await expect(store.approve(tenantA, created!.id, { decidedBy: 'other' })).rejects.toThrow(
+      /not pending/,
+    );
+  });
+
+  it('refuses changes with nothing to change, blank as well as absent', async () => {
+    const [created] = await store.request([req('call-1')]);
+
+    // The database refuses it, not the caller: a note-less correction is a
+    // loop for the model, which learns its arguments were wrong and not which
+    // one. Blank rather than null is the likely mistake — a form posting an
+    // empty textarea sends exactly that — so the constraint has to name it.
+    await expect(
+      store.requestChanges(tenantA, created!.id, { decidedBy: 'yves', reason: '   ' }),
+    ).rejects.toThrow(/approvals_changes_need_reason/);
+
+    // And the row is untouched: a refused decision must not half-apply.
+    expect((await store.find(tenantA, created!.id))?.status).toBe('pending');
+  });
+
+  it('shows the whole inbox newest first, decided rows included', async () => {
+    const [first] = await store.request([req('call-1')]);
+    const [second] = await store.request([req('call-2')]);
+    await store.approve(tenantA, first!.id, { decidedBy: 'yves' });
+
+    const recent = await store.recent(tenantA);
+
+    // `pending` answers "what is blocked on me" and would hide the approved
+    // row entirely; the inbox needs both halves to segment them.
+    expect(recent.map((a) => a.toolCallId)).toEqual(['call-2', 'call-1']);
+    expect(recent.map((a) => a.status)).toEqual(['pending', 'approved']);
+    expect(second).toBeDefined();
+  });
+
   it('deletes approvals along with the conversation', async () => {
     await store.request([req('call-1')]);
 

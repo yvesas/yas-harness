@@ -83,6 +83,12 @@ class CapturingApprovalStore implements ApprovalStore {
   reject(): Promise<never> {
     throw new Error('unused');
   }
+  requestChanges(): Promise<never> {
+    throw new Error('unused');
+  }
+  recent(): Promise<Approval[]> {
+    return Promise.resolve([]);
+  }
   list(): Promise<Approval[]> {
     return Promise.resolve([]);
   }

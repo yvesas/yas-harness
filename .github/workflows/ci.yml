@@ -131,7 +131,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Built on every change and pushed on none. The release workflow is the
       # only thing that publishes, and it only runs on a tag — so without this

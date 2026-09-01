@@ -72,7 +72,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
-    "gpt-tokenizer": "^3.4.0",
+    "gpt-tokenizer": "^4.0.0",
     "pg": "^8.23.0",
     "zod": "^4.4.3"
   }

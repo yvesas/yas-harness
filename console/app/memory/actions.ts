@@ -56,6 +56,9 @@ export async function addDocument(form: FormData): Promise<never> {
     const outcome = await api.memory.ingest({
       tenantId: tenant.id,
       sourceId: source.id,
+      // A person typed this into the console, which is the one path where the
+      // harness can say `owner` without guessing.
+      provenance: 'owner',
       title: String(form.get('title') ?? '').trim(),
       body: String(form.get('body') ?? ''),
       ...(String(form.get('url') ?? '').trim() === ''
@@ -108,6 +111,10 @@ export async function ingestFromConnection(form: FormData): Promise<never> {
         const outcome = await api.memory.ingest({
           tenantId: tenant.id,
           sourceId: source.id,
+          // Whatever the connected source returned. Nobody here vouched for
+          // it, and a Drive doc or a Slack message can be written by anyone
+          // with access — so it is untrusted, not owner.
+          provenance: 'untrusted',
           // The id it has at the source, so a second run updates in place.
           externalId: `${connectionId}:${resource.id}`,
           title: resource.title,

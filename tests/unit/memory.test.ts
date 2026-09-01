@@ -288,6 +288,9 @@ describe('a memory grant becomes a tool', () => {
         url: 'https://wiki.test/1',
         text: 'the passage',
         distance: 0.1,
+        provenance: 'owner',
+        importance: 5,
+        score: 0.47,
       },
     ]);
 

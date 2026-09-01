@@ -20,14 +20,19 @@ import { createHash } from 'node:crypto';
 import { chunk, type ChunkOptions } from './chunking.js';
 import { assertDimensions, type EmbedderFactory } from './embedder.js';
 import {
+  CANDIDATE_MULTIPLIER,
+  DEFAULT_IMPORTANCE,
   DEFAULT_MAX_DISTANCE,
   DEFAULT_SEARCH_LIMIT,
   MemoryError,
+  RECENCY_FLOOR,
+  RECENCY_HALF_LIFE_DAYS,
   type CreateSourceInput,
   type DocumentInput,
   type IngestOutcome,
   type MemorySource,
   type MemoryStore,
+  type Provenance,
   type SearchHit,
   type SearchQuery,
   type StoredDocument,
@@ -219,6 +224,12 @@ export class PostgresMemoryStore implements MemoryStore {
       throw new MemoryError('the query could not be embedded');
     }
 
+    const limit = query.limit ?? DEFAULT_SEARCH_LIMIT;
+
+    // Two stages, because the two orderings want different things. The inner
+    // one is `ORDER BY distance LIMIT n`, which is exactly what the ivfflat
+    // index answers; the outer one reorders that pool by a score the index
+    // knows nothing about. Scoring first would mean scanning every chunk.
     const { rows } = await this.#pool.query<{
       document_id: string;
       slug: string;
@@ -226,23 +237,49 @@ export class PostgresMemoryStore implements MemoryStore {
       url: string | null;
       text: string;
       distance: string;
+      provenance: Provenance;
+      importance: number;
+      score: string;
     }>(
-      `SELECT c.document_id, s.slug, d.title, d.url, c.text,
-              (c.embedding <=> $2::vector)::text AS distance
-         FROM memory_chunks c
-         JOIN memory_documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id
-         JOIN memory_sources s ON s.id = d.source_id AND s.tenant_id = d.tenant_id
-        WHERE c.tenant_id = $1
-          AND d.source_id = ANY($3::uuid[])
-          AND (c.embedding <=> $2::vector) <= $4
-        ORDER BY c.embedding <=> $2::vector
-        LIMIT $5`,
+      `WITH candidates AS (
+         SELECT c.document_id, c.text,
+                (c.embedding <=> $2::vector) AS distance,
+                d.source_id, d.title, d.url, d.provenance, d.importance, d.updated_at
+           FROM memory_chunks c
+           JOIN memory_documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id
+          WHERE c.tenant_id = $1
+            AND d.source_id = ANY($3::uuid[])
+            AND (c.embedding <=> $2::vector) <= $4
+          ORDER BY c.embedding <=> $2::vector
+          LIMIT $5
+       )
+       SELECT r.document_id, r.slug, r.title, r.url, r.text,
+              r.distance::text AS distance, r.provenance, r.importance,
+              r.score::text AS score
+         FROM (
+           SELECT k.document_id, s.slug, k.title, k.url, k.text, k.distance,
+                  k.provenance, k.importance,
+                  -- relevance x recency x importance, each in (0, 1].
+                  (1 - k.distance / 2)
+                  * ($6::float8 + (1 - $6::float8)
+                     * exp(-ln(2)
+                           * (extract(epoch FROM (now() - k.updated_at)) / 86400.0)
+                           / $7::float8))
+                  * (k.importance / 10.0) AS score
+             FROM candidates k
+             JOIN memory_sources s ON s.id = k.source_id AND s.tenant_id = $1
+         ) r
+        ORDER BY r.score DESC
+        LIMIT $8`,
       [
         tenantId,
         toVector(vector),
         query.sourceIds,
         query.maxDistance ?? DEFAULT_MAX_DISTANCE,
-        query.limit ?? DEFAULT_SEARCH_LIMIT,
+        limit * CANDIDATE_MULTIPLIER,
+        RECENCY_FLOOR,
+        RECENCY_HALF_LIFE_DAYS,
+        limit,
       ],
     );
 
@@ -253,6 +290,9 @@ export class PostgresMemoryStore implements MemoryStore {
       url: row.url,
       text: row.text,
       distance: Number(row.distance),
+      provenance: row.provenance,
+      importance: Number(row.importance),
+      score: Number(row.score),
     }));
   }
 
@@ -282,14 +322,20 @@ async function upsertDocument(
 ): Promise<StoredDocument> {
   const { rows } = await client.query<DocumentRow>(
     `INSERT INTO memory_documents
-       (tenant_id, source_id, external_id, title, body, url, checksum, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (tenant_id, source_id, external_id, title, body, url, checksum, metadata,
+        provenance, importance)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (source_id, external_id)
      DO UPDATE SET title = excluded.title,
                    body = excluded.body,
                    url = excluded.url,
                    checksum = excluded.checksum,
                    metadata = excluded.metadata,
+                   -- Re-ingesting restates both: a source that was untrusted
+                   -- last time is untrusted now, and a caller that raised a
+                   -- document's importance means it.
+                   provenance = excluded.provenance,
+                   importance = excluded.importance,
                    updated_at = now()
      RETURNING id, source_id, title, url, updated_at, 0::text AS chunks`,
     [
@@ -301,9 +347,29 @@ async function upsertDocument(
       input.url ?? null,
       checksum,
       JSON.stringify(input.metadata ?? {}),
+      input.provenance,
+      importanceOf(input),
     ],
   );
   return toDocument(rows[0]!);
+}
+
+/**
+ * The importance to store, refused rather than clamped when it is out of range.
+ *
+ * The database `CHECK` would catch it anyway, but as a constraint violation
+ * naming a column — which tells a caller nothing about which document was
+ * wrong. Clamping silently would be worse: an 11 meant something, and storing
+ * 10 while reporting success hides that the caller and the store disagree.
+ */
+function importanceOf(input: DocumentInput): number {
+  const importance = input.importance ?? DEFAULT_IMPORTANCE;
+  if (!Number.isInteger(importance) || importance < 1 || importance > 10) {
+    throw new MemoryError(
+      `document "${input.title}" has importance ${String(importance)}; expected a whole number from 1 to 10`,
+    );
+  }
+  return importance;
 }
 
 function toSource(row: SourceRow): MemorySource {

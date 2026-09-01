@@ -19,6 +19,8 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
+import type { DocumentInput } from '../../src/memory/memory-store.js';
+import { RECENCY_FLOOR } from '../../src/memory/memory-store.js';
 import { PostgresMemoryStore } from '../../src/memory/postgres-memory-store.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
@@ -99,6 +101,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
     await store.ingest({
       tenantId,
       sourceId: source.id,
+      provenance: 'owner',
       externalId: 'doc-a',
       title: 'Apples',
       body: 'apple orchards and how to keep them',
@@ -106,6 +109,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
     await store.ingest({
       tenantId,
       sourceId: source.id,
+      provenance: 'owner',
       externalId: 'doc-z',
       title: 'Zebras',
       body: 'zebra herds and where they graze',
@@ -150,9 +154,10 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
 
   it('does not pay to embed a document that has not changed', async () => {
     const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
-    const document = {
+    const document: DocumentInput = {
       tenantId: tenantA,
       sourceId: source.id,
+      provenance: 'owner',
       externalId: 'doc-a',
       title: 'Apples',
       body: 'apple orchards',
@@ -173,6 +178,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
     await store.ingest({
       tenantId: tenantA,
       sourceId: source.id,
+      provenance: 'owner',
       externalId: 'doc-a',
       title: 'Apples',
       body: 'apple orchards',
@@ -181,6 +187,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
     await store.ingest({
       tenantId: tenantA,
       sourceId: source.id,
+      provenance: 'owner',
       externalId: 'doc-a',
       title: 'Apples',
       body: 'zebra herds now, entirely rewritten',
@@ -225,6 +232,96 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
       [tenantA],
     );
     expect(Number(rows[0]?.count)).toBe(0);
+  });
+
+  it('hands provenance back with the passage, unchanged from what was written', async () => {
+    const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
+    await store.ingest({
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'untrusted',
+      title: 'Apples',
+      body: 'apple orchards',
+    });
+
+    const [hit] = await store.search(tenantA, { sourceIds: [source.id], text: 'apples' });
+
+    // The point of recording it is that a caller can act on it; a value that
+    // never leaves the table is a value nobody can weigh.
+    expect(hit?.provenance).toBe('untrusted');
+    expect(hit?.importance).toBe(5);
+  });
+
+  it('lets importance break a tie that distance cannot', async () => {
+    const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
+    // Both start with "a", so the stub embeds them identically: distance is 0
+    // for each and the ceiling has nothing to say. Only importance differs.
+    await store.ingest({
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'owner',
+      externalId: 'minor',
+      title: 'Aside',
+      body: 'apple orchards, in passing',
+      importance: 2,
+    });
+    await store.ingest({
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'owner',
+      externalId: 'major',
+      title: 'Reference',
+      body: 'apple orchards, the standing guide',
+      importance: 9,
+    });
+
+    const hits = await store.search(tenantA, { sourceIds: [source.id], text: 'apples' });
+
+    expect(hits.map((hit) => hit.title)).toEqual(['Reference', 'Aside']);
+    expect(hits[0]!.distance).toBe(hits[1]!.distance);
+    expect(hits[0]!.score).toBeGreaterThan(hits[1]!.score);
+  });
+
+  it('lets age cost a passage at most half its score, never its place in the corpus', async () => {
+    const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
+    await store.ingest({
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'owner',
+      externalId: 'ancient',
+      title: 'Apples',
+      body: 'apple orchards',
+    });
+    // Ten years is many half-lives: without the floor, the exponential would
+    // have driven this to roughly zero and the document would be unreachable
+    // however well it answers.
+    await pool.query(
+      `UPDATE memory_documents SET updated_at = now() - interval '10 years'
+        WHERE tenant_id = $1 AND external_id = 'ancient'`,
+      [tenantA],
+    );
+
+    const [hit] = await store.search(tenantA, { sourceIds: [source.id], text: 'apples' });
+
+    expect(hit).toBeDefined();
+    // distance 0 and importance 5 leave score = recency x 0.5, and recency
+    // cannot fall below RECENCY_FLOOR.
+    expect(hit!.score).toBeGreaterThanOrEqual(RECENCY_FLOOR * 0.5);
+  });
+
+  it('refuses an importance outside 1-10 rather than clamping it', async () => {
+    const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
+    const document: DocumentInput = {
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'owner',
+      title: 'Apples',
+      body: 'apple orchards',
+    };
+
+    await expect(store.ingest({ ...document, importance: 11 })).rejects.toThrow(/1 to 10/);
+    await expect(store.ingest({ ...document, importance: 0 })).rejects.toThrow(/1 to 10/);
+    await expect(store.ingest({ ...document, importance: 2.5 })).rejects.toThrow(/1 to 10/);
   });
 });
 

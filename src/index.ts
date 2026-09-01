@@ -279,13 +279,22 @@ export {
   EmbeddingError,
 } from './memory/embedder.js';
 export type { Embedder } from './memory/embedder.js';
-export { DEFAULT_MAX_DISTANCE, DEFAULT_SEARCH_LIMIT, MemoryError } from './memory/memory-store.js';
+export {
+  CANDIDATE_MULTIPLIER,
+  DEFAULT_IMPORTANCE,
+  DEFAULT_MAX_DISTANCE,
+  DEFAULT_SEARCH_LIMIT,
+  MemoryError,
+  RECENCY_FLOOR,
+  RECENCY_HALF_LIFE_DAYS,
+} from './memory/memory-store.js';
 export type {
   CreateSourceInput,
   DocumentInput,
   IngestOutcome,
   MemorySource,
   MemoryStore,
+  Provenance,
   SearchHit,
   SearchQuery,
   StoredDocument,

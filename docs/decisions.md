@@ -1014,6 +1014,30 @@ ADR instead.
 - **Personas are declarative configuration in `config/personas/`**, validated
   with Zod and versioned in Git — so instructions change without touching the
   loop.
+- **A document records who put it there, and `provenance` is required at
+  ingest.** A poisoned fact reads exactly like a true one, so scanning content
+  cannot answer "can this be trusted" — only the writer knows, and only at the
+  moment of writing. `provenance` is a closed set (`owner` / `agent` /
+  `untrusted` / `system`) on `memory_documents` rather than on `memory_chunks`:
+  one ingest has one origin, the search already joins documents so filtering is
+  free, and a per-chunk column could hold two values for one document that the
+  write path has no way to produce. `DocumentInput.provenance` has **no
+  default** — the compiler asking every caller is the mechanism, because
+  nothing downstream can work it out later and a default would be a guess
+  recorded as a fact. The column's own default is `untrusted`, so a raw INSERT
+  that forgets it cannot mint owner-grade knowledge.
+- **Search ranks by relevance × recency × importance, and the distance ceiling
+  only filters.** The 0.6 ceiling was the sole gate and is a bad one: an
+  unrelated passage was measured at 0.573, comfortably inside it. Importance
+  (1–10) is assigned at write time, where somebody knows; recency needs no
+  column, since `updated_at` is already there. Two properties are deliberate.
+  Recency has a **floor** (`RECENCY_FLOOR`), because multiplying by an
+  unfloored exponential *erases* rather than ranks — a two-year-old document
+  would score near zero and never come back however exactly it answers, which
+  is the ceiling's failure mode wearing a different hat. And the query is **two
+  stages**: an inner `ORDER BY distance LIMIT n` that the ivfflat index can
+  answer, then a re-rank of that pool. Scoring first would scan every chunk,
+  since no index knows recency or importance.
 - **`Harness` stays flat; its 30 members are not grouped into facets.**
   Considered and declined. Grouping them (`harness.observability.traceReader`,
   `harness.connections.vault`) reads like an Interface Segregation fix, but ISP

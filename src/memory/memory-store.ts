@@ -16,6 +16,22 @@
  * moment anything was ingested.
  */
 
+/**
+ * Who put a document in the corpus.
+ *
+ * A closed set, written by the ingest path and never by a model. It is not a
+ * description of the content — it is a statement about the writer, which is the
+ * only thing that survives an adversary: a poisoned fact reads exactly like a
+ * true one, so scanning text cannot answer "can this be trusted" and the
+ * question has to be settled where the content entered.
+ *
+ * - `owner` — a person put it there deliberately
+ * - `agent` — the model wrote it, from its own work
+ * - `untrusted` — it came from outside: a connected source, a fetched page
+ * - `system` — scaffolding the harness itself added
+ */
+export type Provenance = 'owner' | 'agent' | 'untrusted' | 'system';
+
 export interface MemorySource {
   readonly id: string;
   readonly tenantId: string;
@@ -49,6 +65,19 @@ export interface DocumentInput {
   readonly title: string;
   readonly body: string;
   readonly url?: string;
+  /**
+   * Who is putting it there. **Required, and deliberately not defaulted**: the
+   * caller is the only one who knows, and a default would be a guess recorded
+   * as a fact. The compiler asking is the whole mechanism — there is nothing
+   * downstream that can work this out later.
+   */
+  readonly provenance: Provenance;
+  /**
+   * 1–10, how much this is worth remembering. A ranking signal, never a
+   * filter. Assigned here because this is where somebody — a person, or a
+   * model already in the loop — knows; search has no way to judge it.
+   */
+  readonly importance?: number;
   readonly metadata?: Record<string, unknown>;
 }
 
@@ -91,6 +120,18 @@ export interface SearchHit {
   readonly text: string;
   /** 0 is identical. Returned so a caller can judge, not just rank. */
   readonly distance: number;
+  /** Who put the document here. Returned so a caller can weigh it. */
+  readonly provenance: Provenance;
+  readonly importance: number;
+  /**
+   * What the hit was ordered by: relevance × recency × importance, in (0, 1].
+   *
+   * Returned beside `distance` rather than instead of it, because they answer
+   * different questions — distance is how close the text is, score is how much
+   * this passage is worth showing a model. A caller that only wants nearest
+   * still has the number it had before.
+   */
+  readonly score: number;
 }
 
 export interface MemoryStore {
@@ -125,5 +166,42 @@ export const DEFAULT_SEARCH_LIMIT = 6;
  * what is merely nearest. Generous rather than strict: a missing passage is a
  * worse failure here than a weak one, because a model can ignore a weak match
  * and cannot ignore something it never saw.
+ *
+ * It is a **filter**, and on its own it is a bad gate: an unrelated passage has
+ * been measured at 0.573, comfortably inside it. That is why ranking below does
+ * not depend on it.
  */
 export const DEFAULT_MAX_DISTANCE = 0.6;
+
+/** How much a document is worth when nobody said. Neutral, not high. */
+export const DEFAULT_IMPORTANCE = 5;
+
+/**
+ * How long until recency has halved a document's weight.
+ *
+ * Ninety days is long on purpose. A knowledge base is mostly reference — a
+ * design note from last quarter is as true as it was — so recency is here to
+ * break ties between comparable passages, not to bury the corpus.
+ */
+export const RECENCY_HALF_LIFE_DAYS = 90;
+
+/**
+ * The share of its weight an old document keeps, however old.
+ *
+ * Without a floor, multiplying by an exponential decay *erases* rather than
+ * ranks: at a 90-day half-life a two-year-old document scores near zero and can
+ * never be returned, no matter how exactly it answers the question. That is the
+ * ceiling's failure mode again, wearing a different hat. With the floor, age
+ * can cost a passage at most half its score.
+ */
+export const RECENCY_FLOOR = 0.5;
+
+/**
+ * How many nearest neighbours are re-ranked to produce one page of results.
+ *
+ * Ranking cannot be pushed into the vector index — the index knows distance and
+ * nothing about recency or importance — so the query takes a pool of the
+ * nearest by distance, which *is* indexed, and reorders that. Too small a pool
+ * and re-ranking has nothing to reorder; too large and it sorts the corpus.
+ */
+export const CANDIDATE_MULTIPLIER = 5;

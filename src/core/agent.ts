@@ -467,6 +467,12 @@ export class Agent {
             toolCallId: call.id,
             toolName: call.name,
             input: call.input,
+            // What the reviewer will actually read. Asked of the tool with the
+            // arguments of *this* call, since that is where the blast radius
+            // is — and named with the rule that held it, so a gate nobody
+            // expected can be traced instead of guessed at.
+            ...ctx.scope.tools.gate(call.name, call.input),
+            policySource: 'tool.requiresApproval',
           })),
         );
         for (const approval of created) decisions.set(approval.toolCallId, approval);
@@ -534,6 +540,19 @@ export class Agent {
         const because = approval.reason ? `: ${approval.reason}` : '';
         return {
           content: `tool "${call.name}" was rejected by ${approval.decidedBy ?? 'an operator'}${because}`,
+          isError: true,
+        };
+      }
+      if (approval?.status === 'changes_requested') {
+        // Deliberately not phrased as a refusal. A rejection ends the attempt;
+        // this one is the reviewer saying the action was right and the
+        // arguments were not, so the wording invites the model to call the
+        // same tool again with what was asked for. The note is required by the
+        // store, so there is always something concrete here to act on.
+        return {
+          content:
+            `${approval.decidedBy ?? 'an operator'} asked for changes before "${call.name}" runs: ` +
+            `${approval.reason ?? ''}. Call it again with that addressed.`,
           isError: true,
         };
       }

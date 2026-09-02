@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 
+import type { Risk } from '../approval/approval-store.js';
 import type { ToolSchema } from '../models/model-gateway.js';
 
 /** Everything a tool is allowed to know about the call it is serving. */
@@ -35,6 +36,23 @@ export interface ToolDefinition<Input = unknown> {
    * unchecked.
    */
   readonly requiresApproval?: boolean;
+  /**
+   * How much damage this would do if the call were wrong. Ignored unless
+   * `requiresApproval`; defaults to `medium`, because a gated call nobody
+   * rated is not thereby a safe one.
+   */
+  readonly risk?: Risk;
+  /**
+   * One sentence saying what running *this call* would do, built from its
+   * arguments — *"sends a real email to 214 recipients"*.
+   *
+   * A function rather than a string because the blast radius is in the input:
+   * the same tool sends one message or two hundred, and the reviewer's whole
+   * decision turns on which. Returning nothing is allowed and honest; a tool
+   * that cannot summarise itself should say so by omission rather than by
+   * restating its own name.
+   */
+  consequence?(input: Input): string | undefined;
   execute(input: Input, context: ToolContext): Promise<ToolResult>;
 }
 
@@ -119,6 +137,30 @@ export class ToolRegistry {
       description: tool.description,
       requiresApproval: tool.requiresApproval === true,
     }));
+  }
+
+  /**
+   * What a reviewer is told about one gated call.
+   *
+   * The consequence is asked of the tool **with the arguments it was called
+   * with**, because that is where the blast radius lives — the same tool sends
+   * one message or two hundred. A tool that throws while describing itself is
+   * not allowed to take the turn down with it: the queue would rather hold a
+   * call with no sentence than lose the gate entirely, since losing the gate
+   * means the action runs unreviewed.
+   */
+  gate(name: string, input: unknown): { risk: Risk; consequence?: string } {
+    const tool = this.#tools.get(name);
+    const risk = tool?.risk ?? 'medium';
+    if (!tool?.consequence) {
+      return { risk };
+    }
+    try {
+      const consequence = tool.consequence(tool.input.parse(input));
+      return consequence === undefined ? { risk } : { risk, consequence };
+    } catch {
+      return { risk };
+    }
   }
 
   requiresApproval(name: string): boolean {

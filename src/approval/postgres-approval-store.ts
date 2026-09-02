@@ -11,7 +11,14 @@
 
 import type { Pool } from 'pg';
 
-import type { Approval, ApprovalStore, Decision, RequestApprovalInput } from './approval-store.js';
+import type {
+  Approval,
+  ApprovalStatus,
+  ApprovalStore,
+  Decision,
+  RequestApprovalInput,
+  Risk,
+} from './approval-store.js';
 import { ApprovalNotPendingError, DEFAULT_PENDING_LIMIT } from './approval-store.js';
 
 interface ApprovalRow {
@@ -21,7 +28,10 @@ interface ApprovalRow {
   tool_call_id: string;
   tool_name: string;
   input: unknown;
-  status: 'pending' | 'approved' | 'rejected';
+  status: ApprovalStatus;
+  risk: Risk;
+  consequence: string | null;
+  policy_source: string | null;
   requested_at: Date;
   decided_by: string | null;
   decided_at: Date | null;
@@ -38,8 +48,10 @@ export class PostgresApprovalStore implements ApprovalStore {
       await client.query('BEGIN');
       for (const input of inputs) {
         const { rows } = await client.query<ApprovalRow>(
-          `INSERT INTO approvals (tenant_id, session_id, tool_call_id, tool_name, input)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO approvals
+             (tenant_id, session_id, tool_call_id, tool_name, input,
+              risk, consequence, policy_source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING *`,
           [
             input.tenantId,
@@ -47,6 +59,9 @@ export class PostgresApprovalStore implements ApprovalStore {
             input.toolCallId,
             input.toolName,
             JSON.stringify(input.input),
+            input.risk ?? 'medium',
+            input.consequence ?? null,
+            input.policySource ?? null,
           ],
         );
         created.push(toApproval(rows[0]!));
@@ -94,6 +109,28 @@ export class PostgresApprovalStore implements ApprovalStore {
     return this.#decide(tenantId, id, 'rejected', decision);
   }
 
+  requestChanges(
+    tenantId: string,
+    id: string,
+    decision: Decision & { reason: string },
+  ): Promise<Approval> {
+    return this.#decide(tenantId, id, 'changes_requested', decision);
+  }
+
+  async recent(tenantId: string, limit = DEFAULT_PENDING_LIMIT): Promise<Approval[]> {
+    const { rows } = await this.pool.query<ApprovalRow>(
+      // Ordered by when it was asked rather than when it was decided: a row
+      // still waiting has no decision time, and sorting on a null would put
+      // exactly the rows somebody cares about at the wrong end.
+      `SELECT * FROM approvals
+        WHERE tenant_id = $1
+        ORDER BY requested_at DESC, id DESC
+        LIMIT $2`,
+      [tenantId, limit],
+    );
+    return rows.map(toApproval);
+  }
+
   async list(tenantId: string, sessionId: string): Promise<Approval[]> {
     const { rows } = await this.pool.query<ApprovalRow>(
       `SELECT * FROM approvals
@@ -120,7 +157,7 @@ export class PostgresApprovalStore implements ApprovalStore {
   async #decide(
     tenantId: string,
     id: string,
-    status: 'approved' | 'rejected',
+    status: Exclude<ApprovalStatus, 'pending'>,
     decision: Decision,
   ): Promise<Approval> {
     // The `status = 'pending'` guard makes the transition atomic: a second
@@ -150,6 +187,9 @@ function toApproval(row: ApprovalRow): Approval {
     toolName: row.tool_name,
     input: row.input,
     status: row.status,
+    risk: row.risk,
+    consequence: row.consequence,
+    policySource: row.policy_source,
     requestedAt: row.requested_at,
     decidedBy: row.decided_by,
     decidedAt: row.decided_at,

@@ -48,6 +48,18 @@ export class RedactingApprovalStore implements ApprovalStore {
     return this.#inner.reject(tenantId, id, decision);
   }
 
+  requestChanges(
+    tenantId: string,
+    id: string,
+    decision: Decision & { reason: string },
+  ): Promise<Approval> {
+    return this.#inner.requestChanges(tenantId, id, decision);
+  }
+
+  recent(tenantId: string, limit?: number): Promise<Approval[]> {
+    return this.#inner.recent(tenantId, limit);
+  }
+
   list(tenantId: string, sessionId: string): Promise<Approval[]> {
     return this.#inner.list(tenantId, sessionId);
   }

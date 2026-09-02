@@ -9,7 +9,13 @@
  * deciding an approval that is not pending.
  */
 
-import type { Approval, ApprovalStore, Decision, RequestApprovalInput } from './approval-store.js';
+import type {
+  Approval,
+  ApprovalStatus,
+  ApprovalStore,
+  Decision,
+  RequestApprovalInput,
+} from './approval-store.js';
 import { ApprovalError, ApprovalNotPendingError, DEFAULT_PENDING_LIMIT } from './approval-store.js';
 
 // Async on purpose despite doing no I/O: it matches the Postgres adapter's
@@ -37,6 +43,9 @@ export class InMemoryApprovalStore implements ApprovalStore {
         toolName: input.toolName,
         input: structuredClone(input.input),
         status: 'pending',
+        risk: input.risk ?? 'medium',
+        consequence: input.consequence ?? null,
+        policySource: input.policySource ?? null,
         requestedAt: new Date(this.#clock * 1000),
         decidedBy: null,
         decidedAt: null,
@@ -75,10 +84,25 @@ export class InMemoryApprovalStore implements ApprovalStore {
     return this.#decide(tenantId, id, 'rejected', decision);
   }
 
+  requestChanges(
+    tenantId: string,
+    id: string,
+    decision: Decision & { reason: string },
+  ): Promise<Approval> {
+    return this.#decide(tenantId, id, 'changes_requested', decision);
+  }
+
   async list(tenantId: string, sessionId: string): Promise<Approval[]> {
     return [...this.#approvals.values()]
       .filter((approval) => approval.tenantId === tenantId && approval.sessionId === sessionId)
       .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime());
+  }
+
+  async recent(tenantId: string, limit = DEFAULT_PENDING_LIMIT): Promise<Approval[]> {
+    return [...this.#approvals.values()]
+      .filter((approval) => approval.tenantId === tenantId)
+      .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime())
+      .slice(0, limit);
   }
 
   pending(tenantId: string, limit = DEFAULT_PENDING_LIMIT): Promise<Approval[]> {
@@ -93,7 +117,7 @@ export class InMemoryApprovalStore implements ApprovalStore {
   async #decide(
     tenantId: string,
     id: string,
-    status: 'approved' | 'rejected',
+    status: Exclude<ApprovalStatus, 'pending'>,
     decision: Decision,
   ): Promise<Approval> {
     const approval = this.#approvals.get(id);

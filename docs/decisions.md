@@ -1019,6 +1019,24 @@ ADR instead.
   names the blank as well as the null: an empty textarea posts `''`, which is
   the likely mistake, and a correction with nothing to correct is a loop.
 
+- **Memory is written by a tool the model calls, never by automatic
+  extraction.** A background pass that decides what was worth keeping spends
+  tokens on every turn, is invisible when it is wrong, and cannot be measured —
+  nobody can count how often it helped. A tool is the opposite on all three: it
+  costs nothing until called, the call is in the trace, and its usefulness is
+  countable. `remembersTo` names **one** writable source and is separate from
+  the `memory` read grant, singular on purpose: reading is a grant over a set,
+  writing is a decision about one place, and an agent that could write into
+  anything it can read would let whatever it was shown become something it
+  asserts. Two rules live in the tool rather than the store, because they are
+  about this writer and not about the corpus: it writes `agent` and never
+  `owner`, and it **searches before writing and refuses a near-identical
+  passage** — content that reached the model *from* a search, written back, is
+  indistinguishable from independent corroboration, and a corpus that quietly
+  agrees with itself is the failure mode of every memory that writes what it
+  reads. The duplicate threshold is far tighter than the search ceiling because
+  it answers a different question: identity, not relevance.
+
 ## Core and storage
 
 - **Message order is a `seq` identity column, not `created_at`.** `now()` is

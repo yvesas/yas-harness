@@ -2,8 +2,9 @@
 
 ## What this is
 
-Reusable agent chassis (harness) for YAS Labs products.
-Products fork this repo and add business modules on top.
+Reusable agent chassis (harness) for YAS Labs products to fork and add business
+modules on top. No product has forked it yet, so nothing downstream constrains
+a change here beyond the ports frozen at 1.0.0.
 
 The repository holds **two things, one product**: the harness itself (`src/`,
 published as the `yas-harness` package) and the operator console (`console/`, an

@@ -6,8 +6,9 @@
 connects external services, asks for human approval and switches AI models —
 so that every product built on top of it does not rebuild that plumbing.
 
-It is the common engine behind the YAS Labs products. Products fork this
-repository and add their own business modules on top.
+It is built to be the common engine behind the YAS Labs products: a product
+forks this repository and adds its own business modules on top. No product runs
+on it yet — 1.0.0 froze the contract, and the first fork is what proves it.
 
 > **Status: 1.0.0.** The ports are stable from this tag on. The console is
 > read-only so far, and OAuth has been proven against mocks rather than a live

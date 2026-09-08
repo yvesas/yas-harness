@@ -23,7 +23,7 @@ import {
   EmbeddingError,
 } from '../../src/memory/embedder.js';
 import { OpenAiCompatibleEmbedder } from '../../src/memory/openai-compatible-embedder.js';
-import type { MemoryStore, SearchHit } from '../../src/memory/memory-store.js';
+import type { DocumentInput, MemoryStore, SearchHit } from '../../src/memory/memory-store.js';
 
 const BASE = {
   id: 'research',
@@ -196,6 +196,7 @@ describe('the embedding adapter', () => {
 /** A memory store the test drives, recording what it was asked. */
 function store(hits: SearchHit[] = [], slugs: string[] = ['wiki']) {
   const searches: { sourceIds: readonly string[]; text: string }[] = [];
+  const ingested: DocumentInput[] = [];
   const memory = {
     findSourceBySlug: (_tenantId: string, slug: string) =>
       Promise.resolve(slugs.includes(slug) ? { id: `id-${slug}`, slug } : null),
@@ -203,8 +204,12 @@ function store(hits: SearchHit[] = [], slugs: string[] = ['wiki']) {
       searches.push(query);
       return Promise.resolve(hits);
     },
+    ingest: (input: DocumentInput) => {
+      ingested.push(input);
+      return Promise.resolve({ document: { title: input.title }, embedded: true });
+    },
   } as unknown as MemoryStore;
-  return { memory, searches };
+  return { memory, searches, ingested };
 }
 
 const deps = {
@@ -360,5 +365,116 @@ describe('telling a document from a question', () => {
     await embedder.embed(['a passage'], 'document');
 
     expect(bodies[0]).not.toHaveProperty('input_type');
+  });
+});
+
+describe('writing to memory as a tool the model calls', () => {
+  const REMEMBERING = { ...BASE, remembersTo: 'notes' };
+
+  it('is not registered unless the agent was granted somewhere to write', () => {
+    const config = parseAgentConfig({ ...BASE, memory: ['wiki'] }, 'test');
+    const { memory } = store();
+
+    const names = declaredAgent(config, { ...deps, memory })
+      .tools.list()
+      .map((t) => t.name);
+
+    // Reading and writing are separate permissions: an agent that could write
+    // into anything it can read would let whatever it was shown become
+    // something it asserts.
+    expect(names).toContain('memory_search');
+    expect(names).not.toContain('memory_remember');
+  });
+
+  it('writes as `agent`, never as the person who owns the corpus', async () => {
+    const config = parseAgentConfig(REMEMBERING, 'test');
+    const { memory, ingested } = store([], ['notes']);
+
+    await declaredAgent(config, { ...deps, memory }).tools.execute(
+      'memory_remember',
+      { title: 'Deploys are Thursdays', body: 'The team ships on Thursday mornings.' },
+      CONTEXT,
+    );
+
+    // The model asserting something does not make a person have said it, and
+    // the provenance column exists to keep those apart.
+    expect(ingested[0]?.provenance).toBe('agent');
+    expect(ingested[0]?.title).toBe('Deploys are Thursdays');
+  });
+
+  it('refuses to write back something memory already holds', async () => {
+    const config = parseAgentConfig(REMEMBERING, 'test');
+    const { memory, ingested } = store(
+      [
+        {
+          documentId: 'd1',
+          sourceSlug: 'notes',
+          title: 'Deploys are Thursdays',
+          url: null,
+          text: 'The team ships on Thursday mornings.',
+          distance: 0.01,
+          provenance: 'agent',
+          importance: 5,
+          score: 0.49,
+        },
+      ],
+      ['notes'],
+    );
+
+    const result = await declaredAgent(config, { ...deps, memory }).tools.execute(
+      'memory_remember',
+      { title: 'Deploys are Thursdays', body: 'The team ships on Thursday mornings.' },
+      CONTEXT,
+    );
+
+    // The loop this stops: a passage that reached the model *from* a search,
+    // written back as a second copy, is indistinguishable from independent
+    // corroboration — a corpus that quietly agrees with itself.
+    expect(ingested).toEqual([]);
+    expect(result.content).toMatch(/Already remembered/);
+  });
+
+  it('writes a genuinely new fact about a subject already covered', async () => {
+    const config = parseAgentConfig(REMEMBERING, 'test');
+    // Same subject, far enough away to be a different claim rather than a
+    // restatement — the duplicate guard is an identity check, not a topic one.
+    const { memory, ingested } = store(
+      [
+        {
+          documentId: 'd1',
+          sourceSlug: 'notes',
+          title: 'Deploys',
+          url: null,
+          text: 'The team ships on Thursday mornings.',
+          distance: 0.4,
+          provenance: 'agent',
+          importance: 5,
+          score: 0.3,
+        },
+      ],
+      ['notes'],
+    );
+
+    await declaredAgent(config, { ...deps, memory }).tools.execute(
+      'memory_remember',
+      { title: 'Freeze week', body: 'No deploys during the December freeze.' },
+      CONTEXT,
+    );
+
+    expect(ingested).toHaveLength(1);
+  });
+
+  it('says so plainly when the source it was told to write to does not exist', async () => {
+    const config = parseAgentConfig(REMEMBERING, 'test');
+    const { memory } = store([], []);
+
+    const result = await declaredAgent(config, { ...deps, memory }).tools.execute(
+      'memory_remember',
+      { title: 'x', body: 'y' },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/no memory source called "notes"/i);
   });
 });

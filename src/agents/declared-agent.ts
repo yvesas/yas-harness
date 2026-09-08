@@ -76,6 +76,9 @@ export function declaredAgent(
   if (config.memory.length > 0 && dependencies.memory) {
     tools.register(memoryTool(config, dependencies.memory));
   }
+  if (config.remembersTo !== undefined && dependencies.memory) {
+    tools.register(rememberTool(config.remembersTo, dependencies.memory));
+  }
 
   return {
     id: config.id,
@@ -178,6 +181,87 @@ function memoryTool(config: AgentConfig, memory: MemoryStore): ToolDefinition<ne
   };
   return tool as unknown as ToolDefinition<never>;
 }
+
+/**
+ * Writing to memory, as a tool the model chooses to call.
+ *
+ * Deliberately not automatic extraction. A background pass that decides what
+ * was worth keeping spends tokens on every turn, is invisible when it is wrong,
+ * and cannot be measured — nobody can count how often it helped. A tool is the
+ * opposite on all three: it costs nothing until called, the call is in the
+ * trace, and its usefulness is countable.
+ *
+ * Two rules live here rather than in the store, because they are about *this*
+ * writer rather than about the corpus:
+ *
+ *   - **`agent`, never `owner`.** The model asserting something does not make
+ *     a person have said it, and the provenance column exists to keep those
+ *     apart.
+ *   - **Nothing already in memory is written back.** Content that reached the
+ *     model *from* a search must not be re-extracted into a second copy: the
+ *     copy is indistinguishable from independent corroboration, and a corpus
+ *     that quietly agrees with itself is the failure mode of every memory that
+ *     writes what it reads. So a remember searches first and refuses a
+ *     near-identical passage.
+ */
+function rememberTool(slug: string, memory: MemoryStore): ToolDefinition<never> {
+  // `importance?: number | undefined` rather than `importance?: number`: with
+  // `exactOptionalPropertyTypes`, Zod's inferred output says the key may be
+  // present and undefined, and the two are different types.
+  const tool: ToolDefinition<{ title: string; body: string; importance?: number | undefined }> = {
+    name: 'memory_remember',
+    description:
+      'Write something down so it survives this conversation. Use it for a durable fact or ' +
+      'decision worth having later — not for a summary of what you just said, and not for ' +
+      'anything you found with memory_search, which is already written down.',
+    input: z.object({
+      title: z.string().min(1).max(200),
+      body: z.string().min(1),
+      importance: z.number().int().min(1).max(10).optional(),
+    }),
+    execute: async (input, context) => {
+      const source = await memory.findSourceBySlug(context.tenantId, slug);
+      if (!source) {
+        // The grant names a slug that does not exist yet. Not an error at
+        // startup, by the same reasoning as the read grant — but by the time a
+        // write is attempted, there is nowhere to put it.
+        return failed(`There is no memory source called "${slug}" to write to.`);
+      }
+
+      const [nearest] = await memory.search(context.tenantId, {
+        sourceIds: [source.id],
+        text: input.body,
+        limit: 1,
+      });
+      if (nearest && nearest.distance <= DUPLICATE_DISTANCE) {
+        return ok(
+          `Already remembered — "${nearest.title}" says this. Nothing was written; ` +
+            `cite that instead of recording it twice.`,
+        );
+      }
+
+      const outcome = await memory.ingest({
+        tenantId: context.tenantId,
+        sourceId: source.id,
+        provenance: 'agent',
+        title: input.title,
+        body: input.body,
+        ...(input.importance === undefined ? {} : { importance: input.importance }),
+      });
+      return ok(`Remembered as "${outcome.document.title}" in ${slug}.`);
+    },
+  };
+  return tool as unknown as ToolDefinition<never>;
+}
+
+/**
+ * How close counts as "already written down".
+ *
+ * Much tighter than the search ceiling, which is a relevance question. This is
+ * an identity question: 0.05 catches a restatement of the same passage and
+ * leaves a genuinely new fact about the same subject alone.
+ */
+const DUPLICATE_DISTANCE = 0.05;
 
 /** The argument every generated tool takes, checked against the grant at run time. */
 const connectionId = z.string().min(1);

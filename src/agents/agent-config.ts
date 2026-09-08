@@ -96,6 +96,20 @@ export const agentConfigSchema = z.object({
    */
   memory: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).default([]),
   /**
+   * The one source it may **write** to, by slug. Absent means it writes none.
+   *
+   * Separate from `memory` and singular on purpose. Reading is a grant over a
+   * set; writing is a decision about one place, and an agent that could write
+   * into any source it can read would let anything it was shown become
+   * something it asserts. A slug here may also appear in `memory` — an agent
+   * usually should read back what it wrote — but it has to be named twice,
+   * because the two permissions are not the same permission.
+   */
+  remembersTo: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{1,63}$/)
+    .optional(),
+  /**
    * Whether a write it performs pauses for a person.
    *
    * Defaults to **true**, and the default is the point: an agent assembled from

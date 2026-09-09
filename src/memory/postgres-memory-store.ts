@@ -27,6 +27,7 @@ import {
   MemoryError,
   RECENCY_FLOOR,
   RECENCY_HALF_LIFE_DAYS,
+  RRF_K,
   type CreateSourceInput,
   type DocumentInput,
   type IngestOutcome,
@@ -226,12 +227,25 @@ export class PostgresMemoryStore implements MemoryStore {
 
     const limit = query.limit ?? DEFAULT_SEARCH_LIMIT;
 
-    // Two stages, because the two orderings want different things. The inner
-    // one is `ORDER BY distance LIMIT n`, which is exactly what the ivfflat
-    // index answers; the outer one reorders that pool by a score the index
-    // knows nothing about. Scoring first would mean scanning every chunk.
+    // Two searches, then two stages.
+    //
+    // The two searches answer different questions: the vector index finds
+    // passages that *mean* the same thing, and is blind to the ones that say
+    // the same word — an error code, a surname, a version number. Those are
+    // exactly the queries where somebody knows the term, so the lexical index
+    // runs beside it and the rankings are fused rather than chosen between.
+    //
+    // Fusion is by rank, not by score. A cosine distance and a `ts_rank` are
+    // not on the same scale and no constant makes them comparable; RRF only
+    // asks each ranker for an order, which is the one thing both can give
+    // honestly.
+    //
+    // Then the same two stages as before: a bounded candidate pool each side,
+    // which the indexes can answer, and a re-rank of the fused set by things
+    // no index knows.
     const { rows } = await this.#pool.query<{
       document_id: string;
+      source_id: string;
       slug: string;
       title: string;
       url: string | null;
@@ -241,50 +255,82 @@ export class PostgresMemoryStore implements MemoryStore {
       importance: number;
       score: string;
     }>(
-      `WITH candidates AS (
-         SELECT c.document_id, c.text,
-                (c.embedding <=> $2::vector) AS distance,
+      `WITH query AS (
+         SELECT websearch_to_tsquery('simple', $9) AS terms
+       ),
+       scoped AS (
+         SELECT c.id, c.document_id, c.text, c.text_search, c.embedding,
                 d.source_id, d.title, d.url, d.provenance, d.importance, d.updated_at
            FROM memory_chunks c
            JOIN memory_documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id
           WHERE c.tenant_id = $1
             AND d.source_id = ANY($3::uuid[])
-            AND (c.embedding <=> $2::vector) <= $4
-          ORDER BY c.embedding <=> $2::vector
+       ),
+       by_vector AS (
+         SELECT id, row_number() OVER (ORDER BY embedding <=> $2::vector) AS rank
+           FROM scoped
+          WHERE (embedding <=> $2::vector) <= $4
+          ORDER BY embedding <=> $2::vector
           LIMIT $5
+       ),
+       by_text AS (
+         SELECT s.id,
+                row_number() OVER (ORDER BY ts_rank(s.text_search, q.terms) DESC, s.id) AS rank
+           FROM scoped s, query q
+          WHERE q.terms IS NOT NULL
+            AND s.text_search @@ q.terms
+          ORDER BY ts_rank(s.text_search, q.terms) DESC, s.id
+          LIMIT $5
+       ),
+       fused AS (
+         -- A full join: a passage the other ranker never saw still counts,
+         -- with only the one reciprocal. That is what lets an exact term match
+         -- surface even when the embedding puts it far away.
+         SELECT coalesce(v.id, t.id) AS id,
+                coalesce(1.0 / ($6::float8 + v.rank), 0)
+                + coalesce(1.0 / ($6::float8 + t.rank), 0) AS rrf
+           FROM by_vector v
+           FULL OUTER JOIN by_text t ON t.id = v.id
        )
-       SELECT r.document_id, r.slug, r.title, r.url, r.text,
+       SELECT r.document_id, r.source_id, r.slug, r.title, r.url, r.text,
               r.distance::text AS distance, r.provenance, r.importance,
               r.score::text AS score
          FROM (
-           SELECT k.document_id, s.slug, k.title, k.url, k.text, k.distance,
-                  k.provenance, k.importance,
-                  -- relevance x recency x importance, each in (0, 1].
-                  (1 - k.distance / 2)
-                  * ($6::float8 + (1 - $6::float8)
+           SELECT s.document_id, s.source_id, src.slug, s.title, s.url, s.text,
+                  (s.embedding <=> $2::vector) AS distance,
+                  s.provenance, s.importance,
+                  -- Relevance is now the fused rank rather than the raw
+                  -- distance; recency and importance multiply it exactly as
+                  -- before, so the ceiling stays a filter and never a ranker.
+                  f.rrf
+                  * ($7::float8 + (1 - $7::float8)
                      * exp(-ln(2)
-                           * (extract(epoch FROM (now() - k.updated_at)) / 86400.0)
-                           / $7::float8))
-                  * (k.importance / 10.0) AS score
-             FROM candidates k
-             JOIN memory_sources s ON s.id = k.source_id AND s.tenant_id = $1
+                           * (extract(epoch FROM (now() - s.updated_at)) / 86400.0)
+                           / $8::float8))
+                  * (s.importance / 10.0) AS score
+             FROM fused f
+             JOIN scoped s ON s.id = f.id
+             JOIN memory_sources src ON src.id = s.source_id AND src.tenant_id = $1
          ) r
         ORDER BY r.score DESC
-        LIMIT $8`,
+        LIMIT $10`,
       [
         tenantId,
         toVector(vector),
         query.sourceIds,
         query.maxDistance ?? DEFAULT_MAX_DISTANCE,
         limit * CANDIDATE_MULTIPLIER,
+        RRF_K,
         RECENCY_FLOOR,
         RECENCY_HALF_LIFE_DAYS,
+        query.text,
         limit,
       ],
     );
 
     return rows.map((row) => ({
       documentId: row.document_id,
+      sourceId: row.source_id,
       sourceSlug: row.slug,
       title: row.title,
       url: row.url,

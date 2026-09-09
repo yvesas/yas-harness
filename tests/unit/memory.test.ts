@@ -288,6 +288,7 @@ describe('a memory grant becomes a tool', () => {
     const { memory } = store([
       {
         documentId: 'd1',
+        sourceId: 'src-1',
         sourceSlug: 'wiki',
         title: 'Onboarding',
         url: 'https://wiki.test/1',
@@ -408,6 +409,7 @@ describe('writing to memory as a tool the model calls', () => {
       [
         {
           documentId: 'd1',
+          sourceId: 'src-1',
           sourceSlug: 'notes',
           title: 'Deploys are Thursdays',
           url: null,
@@ -442,6 +444,7 @@ describe('writing to memory as a tool the model calls', () => {
       [
         {
           documentId: 'd1',
+          sourceId: 'src-1',
           sourceSlug: 'notes',
           title: 'Deploys',
           url: null,

@@ -1037,6 +1037,40 @@ ADR instead.
   reads. The duplicate threshold is far tighter than the search ceiling because
   it answers a different question: identity, not relevance.
 
+- **Search is hybrid: vector and lexical, fused by RRF.** A vector search finds
+  passages that *mean* the same thing and is blind to the ones that *say* the
+  same word — an error code, a surname, a version number — which are exactly the
+  queries where somebody already knows the term. So `memory_chunks` carries a
+  generated `tsvector` beside its embedding and both rankings run, fused by
+  Reciprocal Rank Fusion at k=60. **Fusion is by rank, not by score:** a cosine
+  distance and a `ts_rank` are not on the same scale and no constant makes them
+  comparable, while an order is the one thing both rankers can give honestly.
+  The full outer join is load-bearing — a passage only one ranker saw still
+  counts, with a single reciprocal, which is what lets an exact term match
+  surface when the embedding puts it far away. RRF replaces the *relevance*
+  term only; recency and importance multiply it exactly as before, so the
+  distance ceiling stays a filter on the vector candidates and never a ranker.
+  A consequence worth knowing: a returned hit's `distance` may now exceed
+  `maxDistance`, because it arrived lexically and is reported honestly rather
+  than clamped to look like a near match.
+- **The text index is `simple`, not `english`.** `english` stems and drops
+  English stopwords, which improves English and damages everything else — it
+  would make search quality depend on what language a corpus happens to be in,
+  and the golden rule says this has to work the same in a language tutor and a
+  CRM. `simple` folds case and splits on punctuation, which is language-neutral
+  and is most of the value for the term-lookup case. A deployment that knows its
+  corpus is English changes one word in its fork.
+- **A tool result has two halves: prose for the model, structure for a
+  surface.** `ToolResult.data` never reaches the model — only `content` does.
+  The two audiences want different things from one call: a model wants prose it
+  can quote, a console wants ids it can link. Serving both from `content` means
+  the console parses the prose back apart, which works until somebody improves
+  the wording — the difference between a citation and a regular expression.
+  `memory_search` returns document and source ids, distance and score this way,
+  and the structure rides on `ToolInvocation` rather than into the trace: a
+  trace is redacted on the way to storage and read back months later, while this
+  is for the surface rendering the turn it belongs to.
+
 ## Core and storage
 
 - **Message order is a `seq` identity column, not `created_at`.** `now()` is

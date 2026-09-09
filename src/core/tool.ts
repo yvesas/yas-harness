@@ -23,6 +23,21 @@ export interface ToolContext {
 export interface ToolResult {
   readonly content: string;
   readonly isError: boolean;
+  /**
+   * The same answer, structured, for a surface rather than the model.
+   *
+   * **Never reaches the model** — only `content` does. The two audiences want
+   * different things from one call: a model wants prose it can quote, and a
+   * console wants ids it can link. Serving both from `content` means the
+   * console parses the prose back apart, which works until somebody improves
+   * the wording. Carrying the structure from the start is the difference
+   * between a citation and a regular expression.
+   *
+   * `unknown` because the shape belongs to the tool. A caller that knows which
+   * tool it invoked knows what to expect; one that does not should not be
+   * reading this.
+   */
+  readonly data?: unknown;
 }
 
 export interface ToolDefinition<Input = unknown> {
@@ -70,8 +85,8 @@ export class ToolError extends Error {
   }
 }
 
-export function ok(content: string): ToolResult {
-  return { content, isError: false };
+export function ok(content: string, data?: unknown): ToolResult {
+  return data === undefined ? { content, isError: false } : { content, isError: false, data };
 }
 
 export function failed(content: string): ToolResult {

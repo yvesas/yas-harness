@@ -169,6 +169,10 @@ function memoryTool(config: AgentConfig, memory: MemoryStore): ToolDefinition<ne
         return ok('Nothing in the shared knowledge matched that. Say so rather than guessing.');
       }
 
+      // Both halves of the same answer. The prose is what the model quotes;
+      // the array is what a console links to, and it carries the ids rather
+      // than making a surface parse them back out of the text — which works
+      // until somebody improves the wording.
       return ok(
         hits
           .map(
@@ -176,6 +180,16 @@ function memoryTool(config: AgentConfig, memory: MemoryStore): ToolDefinition<ne
               `--- ${hit.title}${hit.url ? ` (${hit.url})` : ''} [${hit.sourceSlug}]\n${hit.text}`,
           )
           .join('\n\n'),
+        hits.map((hit) => ({
+          documentId: hit.documentId,
+          sourceId: hit.sourceId,
+          sourceSlug: hit.sourceSlug,
+          title: hit.title,
+          url: hit.url,
+          distance: hit.distance,
+          score: hit.score,
+          provenance: hit.provenance,
+        })),
       );
     },
   };

@@ -287,6 +287,7 @@ export {
   MemoryError,
   RECENCY_FLOOR,
   RECENCY_HALF_LIFE_DAYS,
+  RRF_K,
 } from './memory/memory-store.js';
 export type {
   CreateSourceInput,

@@ -31,7 +31,7 @@ import { TurnTrace } from '../telemetry/trace.js';
 
 import type { ModuleRegistry } from '../modules/module.js';
 import type { Persona } from './persona.js';
-import type { ToolRegistry } from './tool.js';
+import type { ToolRegistry, ToolResult } from './tool.js';
 
 export interface AgentDependencies {
   readonly gateway: ModelGateway;
@@ -110,6 +110,15 @@ export interface ToolInvocation {
   readonly input: unknown;
   readonly output: string;
   readonly isError: boolean;
+  /**
+   * The structured half of the result, when the tool produced one.
+   *
+   * It travels here and **not** into the trace: a trace is redacted on its way
+   * to storage and read back months later, while this is for the surface
+   * rendering the turn it belongs to. Putting it in both would mean redacting
+   * a shape nothing declares.
+   */
+  readonly data?: unknown;
 }
 
 export type StopReason =
@@ -511,6 +520,7 @@ export class Agent {
         input: call.input,
         output: result.content,
         isError: result.isError,
+        ...(result.data === undefined ? {} : { data: result.data }),
       });
       results.push({
         type: 'tool_result',
@@ -527,7 +537,7 @@ export class Agent {
     ctx: Context,
     call: ToolCallPart,
     approval: Approval | undefined,
-  ): Promise<{ content: string; isError: boolean }> {
+  ): Promise<ToolResult> {
     if (ctx.scope.tools.requiresApproval(call.name)) {
       if (!this.#approvals) {
         // Fail closed: no approval queue wired, so a gated tool does not run.

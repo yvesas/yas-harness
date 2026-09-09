@@ -20,7 +20,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { fixedEmbedder, type Embedder } from '../../src/memory/embedder.js';
 import type { DocumentInput } from '../../src/memory/memory-store.js';
-import { RECENCY_FLOOR } from '../../src/memory/memory-store.js';
+import { DEFAULT_MAX_DISTANCE, RECENCY_FLOOR } from '../../src/memory/memory-store.js';
 import { PostgresMemoryStore } from '../../src/memory/postgres-memory-store.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
@@ -292,6 +292,12 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
       title: 'Apples',
       body: 'apple orchards',
     });
+    // Measured against itself rather than against a constant: the score is a
+    // fused rank times two factors, and its absolute scale is an implementation
+    // detail that moved once already when RRF replaced raw distance. The floor
+    // is a claim about the *ratio*, so that is what the test states.
+    const [fresh] = await store.search(tenantA, { sourceIds: [source.id], text: 'apples' });
+
     // Ten years is many half-lives: without the floor, the exponential would
     // have driven this to roughly zero and the document would be unreachable
     // however well it answers.
@@ -301,12 +307,59 @@ describe.skipIf(!DATABASE_URL)('PostgresMemoryStore', () => {
       [tenantA],
     );
 
+    const [aged] = await store.search(tenantA, { sourceIds: [source.id], text: 'apples' });
+
+    expect(aged).toBeDefined();
+    // Same corpus and same query, so the fused rank and the importance are
+    // identical on both sides and the ratio is the recency factor alone.
+    expect(aged!.score / fresh!.score).toBeGreaterThanOrEqual(RECENCY_FLOOR);
+    // And it did cost something — a floor that never engages proves nothing.
+    expect(aged!.score).toBeLessThan(fresh!.score);
+  });
+
+  it('finds a passage by its exact words when the embedding puts it far away', async () => {
+    const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
+    // The stub embeds by first character, so a query starting with "E" is
+    // orthogonal to this document and the vector side will never return it —
+    // distance 1, well outside the 0.6 ceiling. The word is right there in the
+    // text, which is exactly the case a vector search is blind to: an error
+    // code, a surname, a version number.
+    await store.ingest({
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'owner',
+      externalId: 'runbook',
+      title: 'Runbook',
+      body: 'apple orchards fail with ERR_SOIL_PH when the ground turns alkaline',
+    });
+
+    const hits = await store.search(tenantA, {
+      sourceIds: [source.id],
+      text: 'ERR_SOIL_PH',
+    });
+
+    expect(hits.map((hit) => hit.title)).toEqual(['Runbook']);
+    // Returned *because* of the words, not despite the distance — and the
+    // distance is reported honestly rather than clamped to look like a match.
+    expect(hits[0]!.distance).toBeGreaterThan(DEFAULT_MAX_DISTANCE);
+  });
+
+  it('carries the source id, not just the slug a person reads', async () => {
+    const source = await store.createSource({ tenantId: tenantA, slug: 'wiki', name: 'Wiki' });
+    await store.ingest({
+      tenantId: tenantA,
+      sourceId: source.id,
+      provenance: 'owner',
+      title: 'Apples',
+      body: 'apple orchards',
+    });
+
     const [hit] = await store.search(tenantA, { sourceIds: [source.id], text: 'apples' });
 
-    expect(hit).toBeDefined();
-    // distance 0 and importance 5 leave score = recency x 0.5, and recency
-    // cannot fall below RECENCY_FLOOR.
-    expect(hit!.score).toBeGreaterThanOrEqual(RECENCY_FLOOR * 0.5);
+    // A surface links by id; making it resolve the slug back is a lookup the
+    // search already did.
+    expect(hit?.sourceId).toBe(source.id);
+    expect(hit?.sourceSlug).toBe('wiki');
   });
 
   it('refuses an importance outside 1-10 rather than clamping it', async () => {

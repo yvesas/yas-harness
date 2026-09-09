@@ -114,17 +114,32 @@ export interface SearchQuery {
 
 export interface SearchHit {
   readonly documentId: string;
+  /**
+   * The source's id as well as its slug.
+   *
+   * A slug is what a person reads and what a grant names; an id is what a
+   * surface links to. Returning only the slug made a console resolve it back
+   * to an id to render a link, which is a lookup the search already did.
+   */
+  readonly sourceId: string;
   readonly sourceSlug: string;
   readonly title: string;
   readonly url: string | null;
   readonly text: string;
-  /** 0 is identical. Returned so a caller can judge, not just rank. */
+  /**
+   * 0 is identical. Returned so a caller can judge, not just rank.
+   *
+   * May exceed `maxDistance`: the ceiling bounds the *vector* candidates, and a
+   * passage can also arrive on the lexical side, which is admitted on its own
+   * merit. That is the point of searching both ways — an exact term match is
+   * worth returning however far the embedding puts it.
+   */
   readonly distance: number;
   /** Who put the document here. Returned so a caller can weigh it. */
   readonly provenance: Provenance;
   readonly importance: number;
   /**
-   * What the hit was ordered by: relevance × recency × importance, in (0, 1].
+   * What the hit was ordered by: relevance × recency × importance.
    *
    * Returned beside `distance` rather than instead of it, because they answer
    * different questions — distance is how close the text is, score is how much
@@ -205,3 +220,16 @@ export const RECENCY_FLOOR = 0.5;
  * and re-ranking has nothing to reorder; too large and it sorts the corpus.
  */
 export const CANDIDATE_MULTIPLIER = 5;
+
+/**
+ * The constant in Reciprocal Rank Fusion, `1 / (k + rank)`.
+ *
+ * 60 is the value the original paper settled on and the one every
+ * implementation since has kept. What it buys is bluntness: at k=60 the gap
+ * between rank 1 and rank 2 is small, so neither ranker can dominate on a
+ * single confident hit, and a passage both rankers merely like beats one that
+ * only one of them loves. That is the behaviour worth having when the two
+ * rankers disagree about what "relevant" means — which is exactly why there
+ * are two.
+ */
+export const RRF_K = 60;

@@ -33,9 +33,9 @@ and they live in the modules that products register.
 | Central router | Picks the module that handles a given input, using a cheap model |
 | Module registry | A module declares what it does and which tools it exposes |
 | Connection layer | OAuth with token refresh, encrypted credentials, per-tenant isolation |
-| Human approval | Any tool the agent runs can require an explicit OK first |
+| Human approval | Any tool the agent runs can require an explicit OK first — with what it would do, how risky it is, and a third answer: do it differently |
 | Model gateway | Any provider, routed by task kind — cheap for triage, strong for reasoning — with fallback and bring-your-own-key |
-| Memory | Conversation context that survives restarts |
+| Memory | Conversation context that survives restarts, plus shared knowledge an agent searches by meaning *and* by exact words, and can write to |
 | Pools & permissions | Each module owns its data; cross-module access is asked for, never taken |
 | Observability | A trace of every step and the cost of every model call |
 
@@ -147,7 +147,11 @@ input.
 
 A tool the agent runs can be marked `requiresApproval`: the turn then pauses
 before running anything and waits for a person, and fails closed if no approval
-queue is wired.
+queue is wired. What waits carries a sentence saying what the call *would do* —
+"sends a real email to 214 recipients", built from the arguments of that call —
+because approving on a tool name alone is rubber-stamping. The reviewer can
+approve, reject, or **request changes**, which sends the call back with a note
+the model reads and corrects.
 
 Writes exposed over **MCP** are gated differently, because MCP has no turn to
 pause — it is request/response. There, a gated call is **refused and recorded**:

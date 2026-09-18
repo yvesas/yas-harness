@@ -194,6 +194,32 @@ call once the step is already running. Both can happen in one run.
 is blocked and a restart in the middle loses only the step in flight. Approve
 it a day later and it picks up where it stopped.
 
+### Answering an approval
+
+The inbox has three parts, and they are three different asks:
+
+| | |
+|---|---|
+| **Needs you** | Blocked on a person. Nothing moves until you answer. Riskiest first, then whichever has waited longest. |
+| **Waiting on the agent** | You asked for changes. The model has the note and has not come back — nothing here needs you. |
+| **Decided** | History, so a decision can be looked up. |
+
+Each row says what the call **would do** rather than only which tool was called
+— *"sends a real email to 214 recipients"*, built from the arguments of that
+call. A queue that shows only `send_email` is asking you to rubber-stamp it.
+A tool that does not describe itself shows its name marked as the fallback it
+is.
+
+Three answers, not two:
+
+- **Approve** — it runs, and the turn continues.
+- **Reject** — the attempt ends. The model is told, with your reason if you
+  gave one.
+- **Request changes** — the call goes back with a note the model reads and
+  acts on. This is the answer you usually have: the action was right and the
+  arguments were not. The note is required, because "changed my mind" with
+  nothing to change tells the model only that it was wrong, not which part.
+
 Copy `config/workflows/weekly-summary.json.example` to start. A workflow naming
 an agent you have not created refuses to run and says which one is missing.
 
@@ -257,6 +283,57 @@ passage found rather than missed.
 
 If a search that obviously should match returns nothing, this is the first
 thing to check.
+
+**Search looks for words as well as meaning.** An embedding finds passages that
+*mean* the same thing and is blind to the ones that *say* the same thing — an
+error code, a surname, a flag, a version number. Those are exactly the searches
+where you already know the term. So every passage is indexed twice, once by
+meaning and once by its words, and the two rankings are fused. In practice:
+searching `ERR_SOIL_PH` finds the runbook that contains it even when nothing
+about the question resembles the surrounding prose.
+
+One consequence to expect when you read the numbers: a result's `distance` can
+be *above* the 0.6 ceiling. That is not a bug — it arrived on the word side and
+is reported honestly rather than adjusted to look like a near match.
+
+The word index is language-neutral (`simple`): it folds case and splits on
+punctuation, and does not stem. Stemming would improve English and damage every
+other language, and this has to work the same whichever your corpus is in.
+
+### Letting an agent write to memory
+
+An agent reads the sources listed in `memory`. To let it *add* to one, name a
+single source in `remembersTo`:
+
+```json
+{
+  "id": "research",
+  "name": "Research",
+  "instructions": "Answer from what you read. Write down what you work out.",
+  "memory": ["wiki", "notes"],
+  "remembersTo": "notes"
+}
+```
+
+It then has a `memory_remember` tool it decides to call. Three things about it
+are deliberate:
+
+- **Reading and writing are separate permissions.** `remembersTo` is one slug,
+  not a list, and a source has to be named twice to be both read and written.
+  An agent that could write into anything it can read would let whatever it was
+  shown become something it asserts.
+- **What it writes is marked `agent`, never `owner`.** The model asserting
+  something does not make a person have said it, and search returns that mark
+  so you can weigh it.
+- **It will not write back what it just read.** Before writing, it searches; a
+  near-identical passage is refused. A passage that reached the model *from*
+  memory, written back as a second copy, is indistinguishable from independent
+  corroboration — a corpus that quietly agrees with itself.
+
+Nothing is extracted automatically. A background pass that decided what was
+worth keeping would spend tokens on every turn, be invisible when it was wrong,
+and could not be counted. A tool costs nothing until called and shows up in the
+trace.
 
 **A small model will invent tool names.** An 8B-class model asked to use tools
 sometimes calls one that was never offered, and a strict provider rejects the
@@ -341,3 +418,8 @@ Written down rather than discovered:
   step as if it were content.
 - **Nothing starts a workflow on a schedule.** Something has to press the
   button — the console, your own cron, a webhook you write.
+- **Nothing stops a background turn writing to memory.** An agent with
+  `remembersTo` can write from any turn, including one nobody is watching. A
+  session does not yet record what it is *for*, so there is nothing to gate on;
+  until it does, give `remembersTo` only to agents a person actually converses
+  with.

@@ -73,7 +73,7 @@ jobs:
 
       # Records what built this image, from which commit, so a consumer can
       # verify it came from this repository rather than someone's laptop.
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
